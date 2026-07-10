@@ -763,6 +763,16 @@ git add -A && git commit -m "feat: indexeddb storage for tracks and state"
   ```
 
 > This task is imperative Web Audio glue; it is verified by build + a manual browser check (Step 6), not a unit test. All position math it relies on is already unit-tested in Task 3.
+>
+> **Known limitation:** SoundTouch buffers internally (FIFO), so audible playback
+> lags the computed source position by the processing latency — the playhead may
+> lead the sound by a few tens of ms, more at extreme stretch. Acceptable for MVP;
+> revisit if it hurts transcription accuracy.
+>
+> **Typings fallback:** if `@soundtouchjs/audio-worklet` ships no types for
+> `SoundTouchNode`, add `src/soundtouch.d.ts` with `declare module '@soundtouchjs/audio-worklet';`
+> and treat `stNode` as `any` for the AudioParam access (`playbackRate`,
+> `pitchSemitones`, `pitch` per the package README).
 
 - [ ] **Step 1: Make the worklet processor available in `public/`**
 
@@ -852,9 +862,11 @@ export class SoundTouchEngine implements AudioEngine {
     return this.buffer?.duration ?? 0;
   }
 
+  // Pure: no side effects. Natural end is handled by source.onended (below),
+  // not here — this is polled ~60/s and must never mutate engine state.
   getCurrentTime(): number {
     if (!this.playing) return this.pausedAt;
-    const { time, ended } = currentSourceTime({
+    const { time } = currentSourceTime({
       startOffset: this.startOffset,
       elapsed: this.ctx.currentTime - this.startCtxTime,
       tempo: this.tempo,
@@ -862,11 +874,6 @@ export class SoundTouchEngine implements AudioEngine {
       loopStart: this.loopStart,
       loopEnd: this.loopEnd,
     });
-    if (ended) {
-      this.pause();
-      this.pausedAt = time;
-      this.onEnded?.();
-    }
     return time;
   }
 
@@ -894,15 +901,18 @@ export class SoundTouchEngine implements AudioEngine {
   }
 
   setTempo(rate: number): void {
-    this.tempo = clampTempo(rate);
+    const next = clampTempo(rate);
     if (this.source && this.stNode) {
-      // reanchor position accounting before changing rate
-      this.pausedAt = this.getCurrentTime();
-      this.startOffset = this.pausedAt;
+      // Capture position under the CURRENT tempo, THEN re-anchor and switch.
+      // (getCurrentTime still reads the old this.tempo here — order matters.)
+      const pos = this.getCurrentTime();
+      this.startOffset = pos;
+      this.pausedAt = pos;
       this.startCtxTime = this.ctx.currentTime;
-      this.source.playbackRate.value = this.tempo;
-      this.stNode.playbackRate.value = this.tempo;
+      this.source.playbackRate.value = next;
+      this.stNode.playbackRate.value = next;
     }
+    this.tempo = next;
   }
 
   setPitchSemitones(n: number): void {
@@ -1057,8 +1067,8 @@ function fakeEngine(): AudioEngine {
   let playing = false;
   return {
     load: async () => {},
-    play: () => { (playing as boolean) = true; },
-    pause: () => { (playing as boolean) = false; },
+    play: () => { playing = true; },
+    pause: () => { playing = false; },
     seek: () => {},
     setTempo: () => {},
     setPitchSemitones: () => {},
@@ -1067,7 +1077,7 @@ function fakeEngine(): AudioEngine {
     getDuration: () => 100,
     get playing() { return playing; },
     dispose: () => {},
-  } as AudioEngine;
+  };
 }
 
 describe('player store', () => {
@@ -1137,11 +1147,20 @@ function ctx(): AudioContext {
 }
 
 let engineFactory: () => AudioEngine = () => new SoundTouchEngine(ctx());
+let engine: AudioEngine | null = null;
+
 export function __setEngineFactory(f: () => AudioEngine) {
   engineFactory = f;
+  engine = null;
 }
 
-let engine: AudioEngine | null = null;
+function ensureEngine(): AudioEngine {
+  if (!engine) {
+    engine = engineFactory();
+    engine.onEnded = () => usePlayerStore.setState({ playing: false });
+  }
+  return engine;
+}
 
 interface PlayerState {
   library: TrackRecord[];
@@ -1172,7 +1191,9 @@ interface PlayerState {
   tick(): void;
 }
 
-function persist() {
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function persistNow() {
   const s = usePlayerStore.getState();
   if (!s.currentTrackId) return;
   void db.saveState({
@@ -1185,6 +1206,12 @@ function persist() {
     markers: [],
     lastPosition: s.position,
   });
+}
+
+// Debounced: pan/slider drags fire many times a second; coalesce IDB writes.
+function persist() {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(persistNow, 400);
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -1223,18 +1250,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   async openTrack(id) {
     const rec = await db.getTrack(id);
     if (!rec) return;
-    if (!engine) {
-      engine = engineFactory();
-      engine.onEnded = () => set({ playing: false });
-    }
+    const e = ensureEngine();
     const arr = await rec.blob.arrayBuffer();
     const audioBuffer = await ctx().decodeAudioData(arr.slice(0));
-    await engine.load(audioBuffer);
+    await e.load(audioBuffer);
     const st = (await db.getState(id)) ?? db.defaultState(id);
-    engine.setTempo(st.tempo);
-    engine.setPitchSemitones(st.pitch);
-    engine.setLoop(st.loopStart, st.loopEnd);
-    engine.seek(st.lastPosition);
+    e.setTempo(st.tempo);
+    e.setPitchSemitones(st.pitch);
+    e.setLoop(st.loopStart, st.loopEnd);
+    e.seek(st.lastPosition);
     set({
       currentTrackId: id,
       peaks: rec.peaks,
@@ -1261,12 +1285,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   togglePlay() {
-    if (!engine || !get().currentTrackId) return;
+    if (!get().currentTrackId) return;
+    const e = ensureEngine();
     if (get().playing) {
-      engine.pause();
+      e.pause();
       set({ playing: false });
     } else {
-      engine.play();
+      e.play();
       set({ playing: true });
     }
     persist();
