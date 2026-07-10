@@ -810,6 +810,8 @@ export interface AudioEngine {
 
 - [ ] **Step 3: Write `src/engine/SoundTouchEngine.ts`**
 
+> ⚠️ **This code shipped with 3 bugs, fixed in the real source (`src/engine/SoundTouchEngine.ts`). Do NOT copy verbatim.** The `stopping` boolean flag does NOT reliably suppress `onended` — `source.stop()` fires `ended` asynchronously, so a synchronous flag reset races it. The shipped fix guards by SOURCE IDENTITY (`if (this.source !== src) return`) and removed `stopping`; `load()` also resets `this.playing = false`; and `startSource()` calls `stopInternal()` first to avoid a node leak on replay. See `src/engine/SoundTouchEngine.ts` and the "Gotchas" section of `CLAUDE.md`.
+
 ```ts
 import { SoundTouchNode } from '@soundtouchjs/audio-worklet';
 import type { AudioEngine } from './AudioEngine';
@@ -1374,6 +1376,8 @@ git add -A && git commit -m "feat: player store with import/open/loop/persist"
 > Canvas rendering + touch is verified by build + manual device check (Step 3). The math it depends on is unit-tested in Task 4.
 
 - [ ] **Step 1: Write `src/waveform/WaveformCanvas.tsx`**
+
+> ⚠️ **The gesture handlers here shipped with bugs, fixed in `src/waveform/WaveformCanvas.tsx`. Do NOT copy verbatim.** As written, a 1-finger pan that gains a 2nd finger stays paused forever (resume was gated on `mode==='pan'`), `onEnd` reset state on the first lifted finger of a multi-touch gesture, and a degenerate pinch (`dist===0`) wrote NaN/Infinity into `pxPerSec`. The shipped fix resumes on FULL release (`e.touches.length===0`) regardless of mode, preserves `wasPlaying` across pan→pinch, downgrades pinch→pan on a 2→1 transition, and floors `pinchStartDist` with `Math.max(1, …)`. Also note `secondsPerBucket` must be `duration/(peaks.length/2)`, not `1/RES` (drift on 44.1kHz). See the fixed source and `CLAUDE.md`.
 
 ```tsx
 import { useEffect, useRef } from 'react';
