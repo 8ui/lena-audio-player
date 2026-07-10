@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '../store/usePlayerStore';
 import { timeToX, xToTime, clampPxPerSec } from './viewport';
-import { PEAKS_RESOLUTION as RES } from './computePeaks';
 
 export function WaveformCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -37,9 +36,13 @@ export function WaveformCanvas() {
       }
 
       // waveform peaks within visible window
-      if (peaks) {
+      if (peaks && peaks.length > 0 && duration > 0) {
         const mid = cssH / 2;
-        const secondsPerBucket = 1 / RES;
+        // Derived from the actual peaks data, not the nominal RES constant:
+        // computePeaks buckets by Math.round(sampleRate/RES) samples, which
+        // for e.g. 44100Hz != exactly RES buckets/sec — using 1/RES here
+        // drifts the waveform out of sync with the real audio playhead.
+        const secondsPerBucket = duration / (peaks.length / 2);
         const leftTime = xToTime(0, position, pxPerSec, cssW);
         const rightTime = xToTime(cssW, position, pxPerSec, cssW);
         const firstBucket = Math.max(0, Math.floor(leftTime / secondsPerBucket));
@@ -65,7 +68,6 @@ export function WaveformCanvas() {
       g.lineTo(cssW / 2, cssH);
       g.stroke();
 
-      void duration;
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);

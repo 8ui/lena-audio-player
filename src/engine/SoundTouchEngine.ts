@@ -71,6 +71,14 @@ export class SoundTouchEngine implements AudioEngine {
   play(): void {
     if (!this.buffer || this.playing) return;
     if (this.ctx.state === 'suspended') void this.ctx.resume();
+    // If playback previously ran to natural end (pausedAt sits at/after
+    // duration), restart from the top instead of starting a zero-length
+    // source that ends immediately. A looped track wraps on its own via
+    // source.loop, so leave pausedAt alone in that case.
+    const looping = this.loopStart !== null && this.loopEnd !== null && this.loopEnd > this.loopStart;
+    if (!looping && this.pausedAt >= this.getDuration()) {
+      this.pausedAt = 0;
+    }
     this.startSource(this.pausedAt);
     this.playing = true;
   }

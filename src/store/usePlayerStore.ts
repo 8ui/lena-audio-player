@@ -60,10 +60,10 @@ interface PlayerState {
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
-function persistNow() {
+function persistNow(): Promise<void> | undefined {
   const s = usePlayerStore.getState();
-  if (!s.currentTrackId) return;
-  void db.saveState({
+  if (!s.currentTrackId) return undefined;
+  return db.saveState({
     trackId: s.currentTrackId,
     tempo: s.tempo,
     pitch: s.pitch,
@@ -78,7 +78,21 @@ function persistNow() {
 // Debounced: pan/slider drags fire many times a second; coalesce IDB writes.
 function persist() {
   if (persistTimer) clearTimeout(persistTimer);
-  persistTimer = setTimeout(persistNow, 400);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    void persistNow();
+  }, 400);
+}
+
+// Cancels any pending debounced write and persists the CURRENT state right
+// away. Used at navigation boundaries (closeTrack/openTrack) so a change
+// made <400ms before leaving isn't dropped when currentTrackId flips.
+function flushPersist(): Promise<void> | undefined {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  return persistNow();
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -115,6 +129,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   async openTrack(id) {
+    flushPersist();
     const rec = await db.getTrack(id);
     if (!rec) return;
     const e = ensureEngine();
@@ -130,23 +145,37 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentTrackId: id,
       peaks: rec.peaks,
       duration: rec.duration,
-      tempo: st.tempo,
-      pitch: st.pitch,
+      tempo: clampTempo(st.tempo),
+      pitch: clampSemitones(st.pitch),
       loopStart: st.loopStart,
       loopEnd: st.loopEnd,
-      pxPerSec: st.pxPerSec,
+      pxPerSec: clampPxPerSec(st.pxPerSec),
       position: st.lastPosition,
       playing: false,
     });
   },
 
   async removeTrack(id) {
+    // Drop any pending debounced write BEFORE deleting, otherwise a timer
+    // that fires afterward would resurrect the just-deleted track's state.
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+    }
     await db.deleteTrack(id);
-    if (get().currentTrackId === id) get().closeTrack();
+    if (get().currentTrackId === id) {
+      // Reset directly (not via closeTrack) — closeTrack flushes a persist,
+      // which would rewrite trackState for the id we just deleted.
+      engine?.pause();
+      set({ currentTrackId: null, playing: false, peaks: null, position: 0 });
+    }
     set({ library: await db.listTracks() });
   },
 
   closeTrack() {
+    // Flush FIRST, while currentTrackId/position still hold the outgoing
+    // track's values — this is what saves the leave-position.
+    flushPersist();
     engine?.pause();
     set({ currentTrackId: null, playing: false, peaks: null, position: 0 });
   },

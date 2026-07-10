@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import { usePlayerStore, __setEngineFactory } from './usePlayerStore';
+import * as db from '../storage/db';
 import type { AudioEngine } from '../engine/AudioEngine';
+import type { TrackRecord } from '../types';
 
 function fakeEngine(): AudioEngine {
   let playing = false;
@@ -59,5 +61,41 @@ describe('player store', () => {
     usePlayerStore.setState({ currentTrackId: 'x' });
     usePlayerStore.getState().togglePlay();
     expect(usePlayerStore.getState().playing).toBe(true);
+  });
+
+  it('flush persists latest state on close', async () => {
+    usePlayerStore.setState({ currentTrackId: 'track-1', position: 42 });
+    usePlayerStore.getState().setTempo(0.5); // schedules a 400ms debounced persist
+    usePlayerStore.getState().closeTrack(); // must flush it synchronously first
+
+    await vi.waitFor(async () => {
+      const saved = await db.getState('track-1');
+      expect(saved?.tempo).toBe(0.5);
+      expect(saved?.lastPosition).toBe(42);
+    });
+  });
+
+  it('removeTrack does not resurrect deleted state', async () => {
+    const id = 'track-remove';
+    const rec: TrackRecord = {
+      id,
+      name: 'doomed',
+      blob: new Blob(['x']),
+      peaks: new Float32Array(0),
+      duration: 10,
+      createdAt: Date.now(),
+    };
+    await db.addTrack(rec);
+    await db.saveState({ ...db.defaultState(id), tempo: 1.2 });
+
+    usePlayerStore.setState({ currentTrackId: id });
+    usePlayerStore.getState().setTempo(0.8); // schedules a pending persist for `id`
+
+    await usePlayerStore.getState().removeTrack(id);
+    expect(await db.getState(id)).toBeUndefined();
+
+    // Prove the (dropped) pending timer never fires and rewrites it later.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(await db.getState(id)).toBeUndefined();
   });
 });
