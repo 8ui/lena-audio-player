@@ -26,7 +26,6 @@ export class SoundTouchEngine implements AudioEngine {
   private pausedAt = 0; // last known source position while paused
   playing = false;
 
-  private stopping = false; // suppress onended during manual stop
   private registered = false;
 
   onTimeUpdate?: (t: number) => void;
@@ -45,6 +44,7 @@ export class SoundTouchEngine implements AudioEngine {
     }
     this.stopInternal();
     this.buffer = buffer;
+    this.playing = false;
     this.pausedAt = 0;
     this.startOffset = 0;
   }
@@ -126,6 +126,9 @@ export class SoundTouchEngine implements AudioEngine {
 
   private startSource(offset: number): void {
     if (!this.buffer) return;
+    // Idempotent cleanup: guarantees no previous source/node graph is left
+    // dangling (e.g. after a natural end where the caller didn't stopInternal()).
+    this.stopInternal();
     this.stNode = new SoundTouchNode({ context: this.ctx });
     this.stNode.connect(this.gain);
     this.stNode.playbackRate.value = this.tempo;
@@ -142,7 +145,11 @@ export class SoundTouchEngine implements AudioEngine {
     }
     src.connect(this.stNode);
     src.onended = () => {
-      if (this.stopping) return;
+      // stopInternal()/startSource() reassign or null this.source
+      // synchronously before this async event fires; if this.source is no
+      // longer `src`, this was a manual stop (pause/seek/load), not a
+      // natural end — skip.
+      if (this.source !== src) return;
       this.playing = false;
       this.pausedAt = this.getDuration();
       this.onEnded?.();
@@ -155,7 +162,6 @@ export class SoundTouchEngine implements AudioEngine {
   }
 
   private stopInternal(): void {
-    this.stopping = true;
     try {
       this.source?.stop();
     } catch {
@@ -165,7 +171,6 @@ export class SoundTouchEngine implements AudioEngine {
     this.stNode?.disconnect();
     this.source = null;
     this.stNode = null;
-    this.stopping = false;
   }
 
   dispose(): void {
