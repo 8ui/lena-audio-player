@@ -86,14 +86,14 @@ export function WaveformCanvas() {
 
     const onStart = (e: TouchEvent) => {
       const s = store.getState();
-      if (e.touches.length === 1) {
+      if (e.touches.length === 1 && mode === 'none') {
         mode = 'pan';
         lastX = e.touches[0].clientX;
         wasPlaying = s.playing;
         if (wasPlaying) s.togglePlay();
       } else if (e.touches.length === 2) {
         mode = 'pinch';
-        pinchStartDist = dist(e.touches);
+        pinchStartDist = Math.max(1, dist(e.touches));
         pinchStartPx = s.pxPerSec;
       }
     };
@@ -110,10 +110,15 @@ export function WaveformCanvas() {
         s.setPxPerSec(clampPxPerSec(pinchStartPx * factor));
       }
     };
-    const onEnd = () => {
-      if (mode === 'pan' && wasPlaying) store.getState().togglePlay();
-      mode = 'none';
-      wasPlaying = false;
+    const onEnd = (e: TouchEvent) => {
+      if (e.touches.length === 0) {
+        if (wasPlaying) store.getState().togglePlay();
+        mode = 'none';
+        wasPlaying = false;
+      } else if (e.touches.length === 1 && mode === 'pinch') {
+        mode = 'pan';
+        lastX = e.touches[0].clientX;
+      }
     };
 
     canvas.addEventListener('touchstart', onStart, { passive: false });
