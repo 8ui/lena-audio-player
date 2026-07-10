@@ -17,15 +17,15 @@ Zustand 5 + Web Audio (`@soundtouchjs/audio-worklet`) + `idb` + Vitest 4 +
 
 ```bash
 npm run dev       # vite dev server
-npm run build     # tsc -b && vite build (type-checks, then bundles)
+npm run build     # vite build (bundles with esbuild; does NOT type-check)
 npm run preview   # serve the production build locally
 npm test          # vitest run (all tests, once)
 npm run test:watch  # vitest watch mode
 npx vitest run <path>   # single test file, e.g. src/engine/position.test.ts
-npx tsc --noEmit  # type-check only, no build output
+npx tsc --noEmit  # type-check only, no build output (separate step from build)
 ```
 
-Currently 9 test files / 32 tests, all passing.
+Currently 9 test files / 32 tests, all passing. **Note:** Type-checking is not part of the build pipeline — run `npx tsc --noEmit` separately if you want to verify types before bundling (esbuild strips types, so `vite build` alone does not catch type errors).
 
 ## Architecture
 
