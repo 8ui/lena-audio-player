@@ -89,13 +89,28 @@ describe('player store', () => {
     await db.saveState({ ...db.defaultState(id), tempo: 1.2 });
 
     usePlayerStore.setState({ currentTrackId: id });
-    usePlayerStore.getState().setTempo(0.8); // schedules a pending persist for `id`
+    usePlayerStore.getState().setTempo(0.7); // schedules a pending 400ms debounced persist for `id`
+
+    // removeTrack resets currentTrackId to null when the removed track is
+    // current, which makes persistNow() a no-op (it only ever writes for the
+    // *live* currentTrackId) even if the underlying native timer is never
+    // cancelled — so a purely behavioral wait can't distinguish "timer was
+    // cleared" from "timer fired harmlessly because currentTrackId was already
+    // null". Spy on the global clearTimeout to directly prove removeTrack
+    // cancels the pending debounce timer, which is the exact invariant this
+    // test guards.
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
 
     await usePlayerStore.getState().removeTrack(id);
+    expect(clearTimeoutSpy).toHaveBeenCalled(); // pending persist timer must be cancelled
+    clearTimeoutSpy.mockRestore();
+
     expect(await db.getState(id)).toBeUndefined();
 
-    // Prove the (dropped) pending timer never fires and rewrites it later.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Belt-and-suspenders: also wait past the 400ms persist debounce window
+    // with real timers and confirm the row is still gone (guards against any
+    // other path that could resurrect it, not just the timer cancellation).
+    await new Promise((resolve) => setTimeout(resolve, 450));
     expect(await db.getState(id)).toBeUndefined();
   });
 });
