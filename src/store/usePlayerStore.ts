@@ -41,10 +41,12 @@ interface PlayerState {
   loopStart: number | null;
   loopEnd: number | null;
   pxPerSec: number;
+  error: string | null;
 
   init(): Promise<void>;
   importFile(file: File): Promise<void>;
   openTrack(id: string): Promise<void>;
+  clearError(): void;
   removeTrack(id: string): Promise<void>;
   closeTrack(): void;
   togglePlay(): void;
@@ -107,14 +109,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   loopStart: null,
   loopEnd: null,
   pxPerSec: PX_PER_SEC_DEFAULT,
+  error: null,
 
   async init() {
     set({ library: await db.listTracks() });
   },
 
   async importFile(file) {
-    const arr = await file.arrayBuffer();
-    const audioBuffer = await ctx().decodeAudioData(arr.slice(0));
+    set({ error: null });
+    let audioBuffer: AudioBuffer;
+    try {
+      const arr = await file.arrayBuffer();
+      audioBuffer = await ctx().decodeAudioData(arr.slice(0));
+    } catch {
+      set({ error: 'Не удалось открыть файл — формат не поддерживается или файл повреждён.' });
+      return;
+    }
     const peaks = computePeaks(audioBuffer.getChannelData(0), audioBuffer.sampleRate);
     const rec: TrackRecord = {
       id: crypto.randomUUID(),
@@ -130,11 +140,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async openTrack(id) {
     flushPersist();
+    set({ error: null });
     const rec = await db.getTrack(id);
     if (!rec) return;
     const e = ensureEngine();
-    const arr = await rec.blob.arrayBuffer();
-    const audioBuffer = await ctx().decodeAudioData(arr.slice(0));
+    let audioBuffer: AudioBuffer;
+    try {
+      const arr = await rec.blob.arrayBuffer();
+      audioBuffer = await ctx().decodeAudioData(arr.slice(0));
+    } catch {
+      set({ error: 'Не удалось открыть трек — файл повреждён или формат не поддерживается.' });
+      return;
+    }
     await e.load(audioBuffer);
     const st = (await db.getState(id)) ?? db.defaultState(id);
     e.setTempo(st.tempo);
@@ -241,5 +258,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   tick() {
     if (!engine) return;
     set({ position: engine.getCurrentTime(), playing: engine.playing });
+  },
+
+  clearError() {
+    set({ error: null });
   },
 }));

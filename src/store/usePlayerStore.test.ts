@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import { usePlayerStore, __setEngineFactory } from './usePlayerStore';
 import * as db from '../storage/db';
@@ -28,8 +28,17 @@ describe('player store', () => {
     usePlayerStore.setState({
       library: [], currentTrackId: null, peaks: null, duration: 0,
       playing: false, position: 0, tempo: 1, pitch: 0,
-      loopStart: null, loopEnd: null, pxPerSec: 100,
+      loopStart: null, loopEnd: null, pxPerSec: 100, error: null,
     });
+  });
+
+  // Some tests below overwrite globalThis.AudioContext with a stub. Restore it
+  // afterward so the mutation can't leak into unrelated tests. (The module-level
+  // sharedCtx cache in the store is only ever populated by a stubbed, rejecting
+  // context here — no test needs a working decode — so it needs no reset.)
+  const realAudioContext = (globalThis as { AudioContext?: unknown }).AudioContext;
+  afterEach(() => {
+    (globalThis as { AudioContext?: unknown }).AudioContext = realAudioContext;
   });
 
   it('clamps tempo through setTempo', () => {
@@ -112,5 +121,54 @@ describe('player store', () => {
     // other path that could resurrect it, not just the timer cancellation).
     await new Promise((resolve) => setTimeout(resolve, 450));
     expect(await db.getState(id)).toBeUndefined();
+  });
+
+  // Stub the shared AudioContext (jsdom has none) with one whose decodeAudioData
+  // always rejects — simulates importing/opening an unsupported or corrupt file.
+  function stubRejectingAudioContext() {
+    (globalThis as { AudioContext?: unknown }).AudioContext = class {
+      decodeAudioData() {
+        return Promise.reject(new DOMException('bad format', 'EncodingError'));
+      }
+    };
+  }
+
+  it('importFile surfaces an error and does not add a track when decode fails', async () => {
+    stubRejectingAudioContext();
+    const file = new File([new Uint8Array([1, 2, 3])], 'broken.xyz');
+
+    await usePlayerStore.getState().importFile(file);
+
+    expect(usePlayerStore.getState().error).toBeTruthy();
+    expect(usePlayerStore.getState().library).toHaveLength(0);
+  });
+
+  it('openTrack surfaces an error and stays in the library when decode fails', async () => {
+    stubRejectingAudioContext();
+    const id = 'track-corrupt';
+    const rec: TrackRecord = {
+      id,
+      name: 'corrupt',
+      blob: new Blob([new Uint8Array([1, 2, 3])]),
+      peaks: new Float32Array(0),
+      duration: 10,
+      createdAt: Date.now(),
+    };
+    // Serve the record straight from the mock so rec.blob keeps its
+    // arrayBuffer() method (a fake-indexeddb round-trip drops it) — the point
+    // of this test is the decode rejection, not blob retrieval.
+    const spy = vi.spyOn(db, 'getTrack').mockResolvedValue(rec);
+
+    await usePlayerStore.getState().openTrack(id);
+
+    expect(usePlayerStore.getState().error).toBeTruthy();
+    expect(usePlayerStore.getState().currentTrackId).toBeNull();
+    spy.mockRestore();
+  });
+
+  it('clearError resets the error', () => {
+    usePlayerStore.setState({ error: 'boom' });
+    usePlayerStore.getState().clearError();
+    expect(usePlayerStore.getState().error).toBeNull();
   });
 });

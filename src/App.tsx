@@ -9,6 +9,8 @@ export default function App() {
   const currentTrackId = usePlayerStore((s) => s.currentTrackId);
   const init = usePlayerStore((s) => s.init);
   const playing = usePlayerStore((s) => s.playing);
+  const error = usePlayerStore((s) => s.error);
+  const clearError = usePlayerStore((s) => s.clearError);
   useEffect(() => {
     void init();
   }, [init]);
@@ -16,5 +18,30 @@ export default function App() {
     if (playing) void requestWakeLock();
     else releaseWakeLock();
   }, [playing]);
-  return currentTrackId ? <Player /> : <Library />;
+  return (
+    <>
+      {error && (
+        <div
+          role="alert"
+          onClick={clearError}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            background: '#c0392b',
+            color: '#fff',
+            padding: '12px 16px',
+            fontSize: 14,
+            textAlign: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          ⚠ {error} <span style={{ opacity: 0.7 }}>(нажми, чтобы скрыть)</span>
+        </div>
+      )}
+      {currentTrackId ? <Player /> : <Library />}
+    </>
+  );
 }
