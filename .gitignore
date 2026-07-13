@@ -3,3 +3,6 @@ dist/
 .DS_Store
 *.local
 .claude/settings.local.json
+
+# superpowers brainstorm mockups
+.superpowers/
