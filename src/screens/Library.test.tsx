@@ -26,4 +26,18 @@ describe('Library', () => {
     screen.getByText('Соната').click();
     expect(openTrack).toHaveBeenCalledWith('a');
   });
+
+  it('the file input accepts explicit audio extensions, not just the audio/* wildcard', () => {
+    // iOS maps the `accept` attribute onto UTIs to decide which files the picker
+    // lets you tap. The bare `audio/*` wildcard does not resolve to the mp3 UTI
+    // there, so real .mp3 files render greyed out and import is impossible —
+    // hit on a real iPhone. Explicit extensions map to UTIs far more reliably,
+    // so they must stay in the attribute.
+    const { container } = render(<Library />);
+    const input = container.querySelector('input[type="file"]')!;
+    const accept = input.getAttribute('accept') ?? '';
+    for (const ext of ['.mp3', '.m4a', '.wav']) {
+      expect(accept).toContain(ext);
+    }
+  });
 });
