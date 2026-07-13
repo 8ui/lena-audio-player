@@ -35,8 +35,8 @@ export default defineConfig({
         lang: 'ru',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#12141a',
-        theme_color: '#12141a',
+        background_color: '#17150f',
+        theme_color: '#17150f',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },

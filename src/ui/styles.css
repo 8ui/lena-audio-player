@@ -1,6 +1,51 @@
-:root { --touch: 48px; }
+:root {
+  --touch: 48px;
+  --r-lg: 20px;
+  --r-md: 14px;
+  --r-sm: 10px;
+}
+
+/* Values here are mirrored in src/ui/theme.ts — theme.test.ts fails if they
+   drift. Add a token in BOTH files or not at all. */
+:root[data-theme='warm'] {
+  --bg: #17150f;
+  --surface: #1e1b14;
+  --elevated: #241f18;
+  --border: #2b2720;
+  --text: #f2ece0;
+  --muted: #a09582;
+  --accent: #ffb43f;
+  --on-accent: #231a08;
+  --playhead: #ff5a5a;
+  --loop-fill: rgba(255,180,63,0.14);
+  --marker: #8be0ff;
+  --canvas-bg: #100f0b;
+  --minimap-peaks: #8a6a30;
+}
+
+:root[data-theme='studio'] {
+  --bg: #12141a;
+  --surface: #181b22;
+  --elevated: #2a2e3a;
+  --border: #23262f;
+  --text: #eeeeee;
+  --muted: #8b93a7;
+  --accent: #5aa0ff;
+  --on-accent: #08111f;
+  --playhead: #ff5a5a;
+  --loop-fill: rgba(90,160,255,0.18);
+  --marker: #ffcf5a;
+  --canvas-bg: #0c0e12;
+  --minimap-peaks: #3f6ea8;
+}
+
 * { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, sans-serif; background: #12141a; color: #eee;
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
   /* Touch-only app: a long-press must never raise iOS's copy/share callout,
      nothing here is text to select, and taps must not flash grey (buttons
      already give feedback via button:active below). These are inherited, so
@@ -8,33 +53,224 @@ body { margin: 0; font-family: system-ui, sans-serif; background: #12141a; color
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
-  -webkit-tap-highlight-color: transparent; }
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* Inherited `user-select: none` has historically broken the caret/selection
    inside form controls on iOS Safari. Nothing needs it today, but marker-label
    editing is the obvious next feature. */
 input, textarea { -webkit-user-select: auto; user-select: auto; }
-button { min-width: var(--touch); min-height: var(--touch); font-size: 18px;
-  border: none; border-radius: 12px; background: #2a2e3a; color: #eee; }
-button:active { background: #3a4050; }
-.waveform { display: block; width: 100%; height: 50vh; background: #0c0e12; }
-.minimap { display: block; width: 100%; height: 48px; background: #0c0e12;
-  border-top: 1px solid #23262f; }
-.transport { position: sticky; bottom: 0; display: flex; gap: 12px; align-items: center;
-  padding: 12px; background: #181b22;
-  /* Standalone on iOS runs full-bleed (viewport-fit=cover), so the sticky
-     transport would sit under the home indicator. */
-  padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-.transport .play { min-width: 72px; min-height: 72px; font-size: 24px; border-radius: 50%; }
-.transport .time { margin-left: auto; font-variant-numeric: tabular-nums; }
-/* Standalone on iOS runs full-bleed (viewport-fit=cover), so a screen's top bar
-   can land under the status bar / notch. env() resolves to 0 when there is no
-   inset, so this is free everywhere else. */
+
+button {
+  min-width: var(--touch);
+  min-height: var(--touch);
+  font-family: inherit;
+  font-size: 18px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--elevated);
+  color: var(--text);
+}
+button:active { filter: brightness(1.3); }
+button:disabled { opacity: 0.4; }
+
+/* ── Player screen ───────────────────────────────────────────────────────
+   A full-height flex column: the waveform is flex:1 and eats whatever the
+   dock leaves. dvh, not vh — iOS's collapsing URL bar makes vh too tall. */
+.player {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.player-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Standalone on iOS runs full-bleed (viewport-fit=cover), so the top bar can
+     land under the status bar / notch. env() is 0 where there is no inset. */
+  padding: calc(6px + env(safe-area-inset-top)) 10px 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.player-header .back {
+  min-width: auto;
+  min-height: 40px;
+  padding: 0 10px;
+  font-size: 14px;
+  background: transparent;
+  color: var(--muted);
+}
+.player-header .track-name {
+  margin-left: auto;
+  max-width: 60%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wave-wrap {
+  position: relative;
+  flex: 1;
+  /* Without min-height:0 a flex item refuses to shrink below its content and
+     the dock gets pushed off-screen on short viewports. */
+  min-height: 0;
+}
+.waveform {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--canvas-bg);
+}
+
+.time-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+  opacity: 0.9;
+  /* The badge sits ON the waveform: a pan gesture starting under it must reach
+     the canvas, so it can never be a touch target. */
+  pointer-events: none;
+}
+.time-badge .total { opacity: 0.6; }
+
+.minimap {
+  display: block;
+  width: 100%;
+  height: 48px;
+  background: var(--canvas-bg);
+  border-top: 1px solid var(--border);
+}
+
+/* ── Dock ── */
+.dock {
+  /* Anchor for the popover, which is an overlay: opening a panel must not
+     resize the waveform. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  /* Standalone on iOS runs full-bleed, so the dock would sit under the home
+     indicator without the bottom inset. */
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+}
+
+.tempo { display: flex; gap: 8px; }
+.tempo button {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 58px;
+  font-size: 26px;
+  border-radius: var(--r-lg);
+}
+.tempo .value {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 58px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.tempo .value b {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+.tempo .value small {
+  font-size: 9px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.transport { display: flex; justify-content: center; }
+.transport .play {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 24px;
+}
+
+.chips { display: flex; gap: 8px; }
+.chips button {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  font-size: 13px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+/* State lives on the chip itself: a set loop / non-zero pitch / any marker is
+   visible without opening the panel. */
+.chips button.on { color: var(--accent); border-color: var(--accent); }
+.chips button[aria-selected='true'] { color: var(--text); border-color: var(--accent); }
+
+/* The popover floats ABOVE the dock (over the waveform), never inside the flex
+   column — that is what keeps the layout from jumping when a tab opens. All
+   three panels are one row of equal-height buttons, so switching tabs does not
+   resize it either. */
+.popover {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% + 8px);
+  left: 8px;
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.popover button {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  font-size: 15px;
+  border-radius: var(--r-md);
+}
+.popover button.primary { flex: 2; color: var(--accent); }
+.popover button.val {
+  flex: 2;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Catches a tap outside the popover. Deliberately covers the canvases: with a
+   panel open, a tap should close it, not scrub the waveform. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+
+/* ── Library (out of scope for this redesign — keep it working) ── */
 .screen-header { padding: calc(12px + env(safe-area-inset-top)) 16px 12px; }
-.control { padding: 12px; }
 .control-row { display: flex; gap: 12px; align-items: center; }
-.control input[type="range"] { width: 100%; height: var(--touch); }
-.stepper, .loop, .markers { display: flex; gap: 12px; }
-.stepper button { flex: 1; font-size: 28px; }
-.reset { min-width: auto; padding: 8px 12px; font-size: 14px; background: transparent; }
-.library-item { display: flex; align-items: center; min-height: 64px; padding: 0 16px;
-  border-bottom: 1px solid #23262f; }
+.library-item {
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+}
