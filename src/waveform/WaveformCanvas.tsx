@@ -16,9 +16,14 @@ export function WaveformCanvas() {
       const dpr = window.devicePixelRatio || 1;
       const cssW = canvas.clientWidth;
       const cssH = canvas.clientHeight;
-      if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
-        canvas.width = cssW * dpr;
-        canvas.height = cssH * dpr;
+      // canvas.width is an unsigned long: assigning a fractional cssW*dpr
+      // (Android dpr 2.625/2.75) truncates, so the !== comparison stays true
+      // forever and the backing store is reallocated every frame. Round first.
+      const bw = Math.round(cssW * dpr);
+      const bh = Math.round(cssH * dpr);
+      if (canvas.width !== bw || canvas.height !== bh) {
+        canvas.width = bw;
+        canvas.height = bh;
       }
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, cssW, cssH);

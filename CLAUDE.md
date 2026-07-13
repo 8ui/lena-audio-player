@@ -25,7 +25,7 @@ npx vitest run <path>   # single test file, e.g. src/engine/position.test.ts
 npx tsc --noEmit  # type-check only, no build output (separate step from build)
 ```
 
-Currently 9 test files / 32 tests, all passing. **Note:** Type-checking is not part of the build pipeline — run `npx tsc --noEmit` separately if you want to verify types before bundling (esbuild strips types, so `vite build` alone does not catch type errors).
+Currently 12 test files / 62 tests, all passing. **Note:** Type-checking is not part of the build pipeline — run `npx tsc --noEmit` separately if you want to verify types before bundling (esbuild strips types, so `vite build` alone does not catch type errors).
 
 ## Architecture
 
@@ -51,6 +51,14 @@ Five layers, each one only talks to the layer directly below it:
    to min/max buckets (200 buckets/sec, see `PEAKS_RESOLUTION`) once at
    import time; `viewport.ts` has the pure time↔pixel math; `WaveformCanvas`
    is the imperative `<canvas>` renderer + touch gesture handler.
+   `MiniMap.tsx` is a second canvas (48px strip under the main waveform)
+   showing the *whole* track — playhead, loop, markers — with tap/drag scrub.
+   It runs its own rAF loop but deliberately does **not** call `store.tick()`:
+   `WaveformCanvas` is the sole ticker (two tickers would double-poll the
+   engine clock). It downsamples the full-track peaks to one column per pixel
+   (`downsamplePeaks`) and caches that array — walking tens of thousands of
+   buckets every frame is the thing to avoid; stroking ~`width` segments is
+   cheap. `markers.ts` holds the pure marker math (sort/relabel/nearest).
 5. **Storage** (`src/storage/db.ts`) — thin `idb` wrapper, two object stores:
    `tracks` (blob + peaks + duration, keyed by id) and `trackState` (tempo,
    pitch, loop, pxPerSec, markers, lastPosition, keyed by trackId).
@@ -153,8 +161,7 @@ resuming on release if it was playing; 2-finger pinch zooms `pxPerSec`.
 
 ## Out of scope for MVP
 
-Marker UI and mini-map are not implemented (the `Marker` type and
-`TrackStateRecord.markers` field exist in `src/types.ts` for forward
-compatibility, but no UI reads/writes them — `persistNow` always saves
-`markers: []`). A Rubberband-based `AudioEngine` is a possible future engine
-swap; only `SoundTouchEngine` exists today.
+Marker UI and the mini-map **are** implemented (`src/ui/MarkersControl.tsx`,
+`src/waveform/MiniMap.tsx`); `persistNow` saves the real `markers` array, and
+`openTrack` restores it. A Rubberband-based `AudioEngine` is a possible future
+engine swap; only `SoundTouchEngine` exists today.

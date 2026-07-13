@@ -1,5 +1,6 @@
 import { usePlayerStore } from '../store/usePlayerStore';
 import { WaveformCanvas } from '../waveform/WaveformCanvas';
+import { MiniMap } from '../waveform/MiniMap';
 import { TransportBar } from '../ui/TransportBar';
 import { TempoControl } from '../ui/TempoControl';
 import { PitchControl } from '../ui/PitchControl';
@@ -14,6 +15,7 @@ export function Player() {
         <button aria-label="назад" onClick={closeTrack}>‹ Библиотека</button>
       </header>
       <WaveformCanvas />
+      <MiniMap />
       <TempoControl />
       <PitchControl />
       <LoopControls />

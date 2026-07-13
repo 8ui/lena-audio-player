@@ -14,3 +14,13 @@ export const clampPxPerSec = (v: number): number =>
 // Drag waveform right (+deltaX) => scroll back in time (earlier).
 export const panDeltaToTime = (deltaXpx: number, pxPerSec: number): number =>
   -deltaXpx / pxPerSec;
+
+// Minimap mapping: the WHOLE track spans the strip width (as opposed to
+// timeToX/xToTime above, which centre a zoomed window on the playhead).
+export const overviewTimeToX = (t: number, duration: number, width: number): number =>
+  duration > 0 ? (t / duration) * width : 0;
+
+export const overviewXToTime = (x: number, duration: number, width: number): number => {
+  if (width <= 0 || duration <= 0) return 0;
+  return Math.min(duration, Math.max(0, (x / width) * duration));
+};
