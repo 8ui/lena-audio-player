@@ -13,7 +13,9 @@ export const clampTempo = (t: number): number => clamp(t, TEMPO_MIN, TEMPO_MAX);
 export const clampSemitones = (n: number): number =>
   clamp(Math.round(n), SEMITONES_MIN, SEMITONES_MAX);
 
-// Rounding is not cosmetic: 0.75 - 0.1 is 0.6499999999999999, and that value
-// goes straight into the store, the engine and IndexedDB.
+// Rounding is not cosmetic: stepping is applied repeatedly (each tap adds
+// another +/- 0.1), and IEEE-754 noise accumulates across those additions —
+// e.g. 0.55 - 0.1 is 0.45000000000000007, not 0.45 — and that value flows
+// straight into the store, the engine and IndexedDB.
 export const stepTempo = (t: number, dir: 1 | -1): number =>
   clampTempo(Math.round((t + dir * TEMPO_STEP) * 100) / 100);
