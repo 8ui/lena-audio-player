@@ -3,6 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#12141a" />
+    <!-- iOS ignores the web manifest's icons for the home screen and reads this
+         instead; without it the installed app gets a screenshot as its icon.
+         The LEADING SLASH is required: Vite only rebases public/ assets whose URL
+         starts with '/', and it swallows a miss silently (never a build error). -->
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <!-- Standalone (no browser chrome) from the home screen. iOS 16.4+ also
+         honours the manifest's display:standalone; the apple- tag covers older
+         iOS, the unprefixed one is the standard (Chrome warns on the apple- one). -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- 'black', NOT 'black-translucent': the viewport above already sets
+         viewport-fit=cover, and translucent makes the web view go full-bleed —
+         the waveform and the error banner would slide under the clock. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Разбор" />
     <title>Разбор</title>
   </head>
   <body>

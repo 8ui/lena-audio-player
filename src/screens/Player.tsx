@@ -11,7 +11,7 @@ export function Player() {
   const closeTrack = usePlayerStore((s) => s.closeTrack);
   return (
     <div className="player">
-      <header className="control-row" style={{ padding: 12 }}>
+      <header className="control-row screen-header">
         <button aria-label="назад" onClick={closeTrack}>‹ Библиотека</button>
       </header>
       <WaveformCanvas />

@@ -20,9 +20,16 @@ button:active { background: #3a4050; }
 .minimap { display: block; width: 100%; height: 48px; background: #0c0e12;
   border-top: 1px solid #23262f; }
 .transport { position: sticky; bottom: 0; display: flex; gap: 12px; align-items: center;
-  padding: 12px; background: #181b22; }
+  padding: 12px; background: #181b22;
+  /* Standalone on iOS runs full-bleed (viewport-fit=cover), so the sticky
+     transport would sit under the home indicator. */
+  padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 .transport .play { min-width: 72px; min-height: 72px; font-size: 24px; border-radius: 50%; }
 .transport .time { margin-left: auto; font-variant-numeric: tabular-nums; }
+/* Standalone on iOS runs full-bleed (viewport-fit=cover), so a screen's top bar
+   can land under the status bar / notch. env() resolves to 0 when there is no
+   inset, so this is free everywhere else. */
+.screen-header { padding: calc(12px + env(safe-area-inset-top)) 16px 12px; }
 .control { padding: 12px; }
 .control-row { display: flex; gap: 12px; align-items: center; }
 .control input[type="range"] { width: 100%; height: var(--touch); }

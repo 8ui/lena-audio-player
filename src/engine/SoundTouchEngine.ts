@@ -7,7 +7,18 @@ import { clampTempo, clampSemitones } from './params';
 // processor at `.dist/soundtouch-processor.js` (registered processor name
 // `soundtouch-processor`). We copy that file verbatim into public/ so it can
 // be served and registered via SoundTouchNode.register(ctx, url).
-const WORKLET_URL = '/soundtouch-processor.js';
+// Must respect Vite's base: on GitHub Pages the app is served from
+// /lena-audio-player/, where an absolute '/soundtouch-processor.js' would 404 —
+// SoundTouchNode.register() then rejects, load() throws, and NOTHING plays,
+// while the whole UI still renders perfectly.
+//
+// The trailing slash of BASE_URL is NOT guaranteed by Vite; it is enforced in
+// vite.config.ts instead, where a mistake is a loud build failure. Doing it here
+// with a runtime .replace() would keep the joined path out of the bundle as a
+// literal, and then CI could not grep the built output to prove the worklet URL
+// is right — which is the only automated defence there is (tsc cannot see
+// vite.config.ts, and vitest forces base '/').
+const WORKLET_URL = `${import.meta.env.BASE_URL}soundtouch-processor.js`;
 
 export class SoundTouchEngine implements AudioEngine {
   private ctx: AudioContext;

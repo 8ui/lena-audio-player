@@ -1,0 +1,78 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Queue deploys; do NOT cancel one in flight — cancelling actions/deploy-pages
+# can strand the deployment as permanently "in progress". Queued runs still
+# collapse to the latest.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write # configure-pages reads/creates the Pages site
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # vite 8 needs ^20.19 || >=22.12
+          cache: npm
+      # First, and with enablement: creates the Pages site if absent (idempotent)
+      # and fails fast, instead of dying confusingly after a full build.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - run: npm ci
+      # `vite build` runs esbuild and does NOT type-check, so gate on both.
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run build
+
+      # The one failure this project cannot see: if the AudioWorklet URL 404s on
+      # the deployed site, SoundTouchNode.register() rejects and NO AUDIO PLAYS
+      # AT ALL — while every pixel renders perfectly. tsc cannot catch it
+      # (vite.config.ts is outside the tsc gate) and neither can the test suite
+      # (vitest forces base '/', so BASE_URL is always '/' under tests). So
+      # assert it against the real build output, or a bad `base` ships silently.
+      - name: Verify the built bundle (a bad base = a silently mute app)
+        run: |
+          set -euo pipefail
+          BASE=/lena-audio-player
+          echo "→ worklet URL is baked into the bundle at the right path"
+          grep -qr "$BASE/soundtouch-processor.js" dist/assets/ \
+            || { echo "FAIL: worklet URL missing/wrong in bundle — the app would be silent"; exit 1; }
+          echo "→ worklet is precached (this is what makes offline playback work)"
+          grep -q soundtouch-processor dist/sw.js \
+            || { echo "FAIL: worklet not in the service-worker precache — offline would be silent"; exit 1; }
+          echo "→ manifest is scoped to the subpath"
+          grep -q "\"scope\":\"$BASE/\"" dist/manifest.webmanifest \
+            || { echo "FAIL: manifest scope is not $BASE/"; exit 1; }
+          echo "→ apple-touch-icon href was rebased (a relative href is silently NOT rebased)"
+          grep -q "href=\"$BASE/icons/apple-touch-icon.png\"" dist/index.html \
+            || { echo "FAIL: apple-touch-icon href not rebased — iOS would use a screenshot"; exit 1; }
+          echo "all build assertions passed"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

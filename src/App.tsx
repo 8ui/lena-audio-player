@@ -32,7 +32,9 @@ export default function App() {
             zIndex: 100,
             background: '#c0392b',
             color: '#fff',
-            padding: '12px 16px',
+            // Standalone on iOS is full-bleed: without the inset this fixed
+            // banner would sit under the status bar. env() is 0 elsewhere.
+            padding: 'calc(12px + env(safe-area-inset-top)) 16px 12px',
             fontSize: 14,
             textAlign: 'center',
             cursor: 'pointer',

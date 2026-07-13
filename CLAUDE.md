@@ -174,6 +174,37 @@ paused forever.
    There is no test-flush hook to force a synchronous write; tests that care
    about persisted state currently don't cover the debounced path. Known
    minor gap, not a bug.
+8. **The app is served from a subpath** (`base: '/lena-audio-player/'` in
+   `vite.config.ts` — GitHub Pages). Any URL to a `public/` asset must be
+   derived from `import.meta.env.BASE_URL` (in TS), or start with a **leading
+   slash** (in `index.html`) so Vite rebases it — a *relative* href is silently
+   NOT rebased, and a missing public file is not even a build error. `BASE_URL`
+   is guaranteed a *leading* slash only, **never a trailing one**, so normalise
+   it (`.replace(/\/?$/, '/')`).
+
+   The one that matters is `WORKLET_URL` in `SoundTouchEngine.ts`: if it 404s,
+   `SoundTouchNode.register` rejects, `load()` throws, and **no audio plays at
+   all** while the entire UI still renders perfectly.
+
+   **The test suite structurally cannot catch a base regression** — vitest forces
+   `base: '/'`, so `BASE_URL` is always `'/'` under tests. A green `npm test`
+   proves nothing here. Only a real `vite build` plus loading a track on the
+   deployed site does. Useful build assertions:
+   ```bash
+   grep -o '"scope":"[^"]*"' dist/manifest.webmanifest  # -> /lena-audio-player/
+   grep -c soundtouch-processor dist/sw.js              # >=1 == precached == offline works
+   grep -o 'apple-touch-icon[^>]*' dist/index.html      # href must be rebased
+   ```
+
+## Deploy
+
+GitHub Pages via `.github/workflows/deploy.yml` on push to `main`
+(`tsc --noEmit` + `npm test` + `vite build` → `actions/deploy-pages`).
+Live at <https://8ui.github.io/lena-audio-player/>. Icons are generated, not
+hand-drawn: `node scripts/gen-icons.mjs` (zero-dep PNG writer; the artwork is the
+app's own waveform + playhead). iOS note: an installed PWA has its **own
+IndexedDB**, separate from the Safari tab — tracks imported in Safari do not
+appear in the installed app. Platform rule, not a bug.
 
 ## Out of scope for MVP
 

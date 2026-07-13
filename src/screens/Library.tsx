@@ -46,7 +46,7 @@ export function Library() {
 
   return (
     <div className="library">
-      <header className="control-row" style={{ padding: 16 }}>
+      <header className="control-row screen-header">
         <h1 style={{ fontSize: 20, margin: 0 }}>Разбор</h1>
         <button style={{ marginLeft: 'auto' }} onClick={() => fileRef.current?.click()}>
           ＋ Импорт
