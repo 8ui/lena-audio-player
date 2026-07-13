@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { usePlayerStore } from '../store/usePlayerStore';
+import { fmtTime } from '../ui/time';
 
 // iOS turns `accept` into a UTI filter and greys out anything that does not
 // match. The bare `audio/*` wildcard does NOT resolve to the mp3 UTI there, so
@@ -30,12 +31,6 @@ export const AUDIO_ACCEPT = [
   '.oga',
   '.opus',
 ].join(',');
-
-function fmt(t: number): string {
-  const m = Math.floor(t / 60);
-  const s = Math.floor(t % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 export function Library() {
   const library = usePlayerStore((s) => s.library);
@@ -69,7 +64,7 @@ export function Library() {
       {library.map((t) => (
         <div key={t.id} className="library-item">
           <span onClick={() => openTrack(t.id)} style={{ flex: 1 }}>{t.name}</span>
-          <span style={{ opacity: 0.6, marginRight: 12 }}>{fmt(t.duration)}</span>
+          <span style={{ opacity: 0.6, marginRight: 12 }}>{fmtTime(t.duration)}</span>
           <button
             aria-label="удалить"
             onClick={() => {
