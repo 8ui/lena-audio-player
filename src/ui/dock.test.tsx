@@ -6,14 +6,33 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { usePlayerStore } from '../store/usePlayerStore';
+import { usePlayerStore, __setEngineFactory } from '../store/usePlayerStore';
+import type { AudioEngine } from '../engine/AudioEngine';
 import { TransportBar } from './TransportBar';
 import { TimeBadge } from './TimeBadge';
 import { PlayerHeader } from './PlayerHeader';
 import { PlayerDock } from './PlayerDock';
 
+function fakeEngine(): AudioEngine {
+  let playing = false;
+  return {
+    load: async () => {},
+    play: () => { playing = true; },
+    pause: () => { playing = false; },
+    seek: () => {},
+    setTempo: () => {},
+    setPitchSemitones: () => {},
+    setLoop: () => {},
+    getCurrentTime: () => 0,
+    getDuration: () => 100,
+    get playing() { return playing; },
+    dispose: () => {},
+  };
+}
+
 describe('TransportBar', () => {
   beforeEach(() => {
+    __setEngineFactory(fakeEngine);
     usePlayerStore.setState({ currentTrackId: 't', playing: false, position: 0, duration: 100 });
   });
   afterEach(cleanup);
@@ -26,6 +45,22 @@ describe('TransportBar', () => {
     expect(screen.queryByText('−5')).toBeNull();
     expect(screen.queryByText('+5')).toBeNull();
     expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('clicking the play button toggles the playing state', () => {
+    render(<TransportBar />);
+    const playButton = screen.getByLabelText('играть');
+
+    // Initially playing is false
+    expect(usePlayerStore.getState().playing).toBe(false);
+
+    // Click to play
+    fireEvent.click(playButton);
+    expect(usePlayerStore.getState().playing).toBe(true);
+
+    // Click to pause
+    fireEvent.click(playButton);
+    expect(usePlayerStore.getState().playing).toBe(false);
   });
 });
 
