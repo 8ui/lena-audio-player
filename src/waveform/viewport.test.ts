@@ -5,7 +5,7 @@ import {
   clampPxPerSec,
   panDeltaToTime,
   overviewTimeToX,
-  overviewXToTime,
+  overviewDragToTime,
 } from './viewport';
 
 describe('viewport', () => {
@@ -37,18 +37,35 @@ describe('overview viewport (minimap)', () => {
     expect(overviewTimeToX(100, 100, 400)).toBeCloseTo(400);
   });
 
-  it('overviewXToTime is the inverse of overviewTimeToX', () => {
-    const x = overviewTimeToX(37, 100, 400);
-    expect(overviewXToTime(x, 100, 400)).toBeCloseTo(37);
-  });
-
-  it('overviewXToTime clamps to 0..duration', () => {
-    expect(overviewXToTime(-50, 100, 400)).toBe(0);
-    expect(overviewXToTime(9999, 100, 400)).toBe(100);
-  });
-
-  it('is safe when duration or width is zero', () => {
+  it('is safe when duration is zero', () => {
     expect(overviewTimeToX(10, 0, 400)).toBe(0);
-    expect(overviewXToTime(200, 100, 0)).toBe(0);
+  });
+});
+
+describe('overviewDragToTime (relative minimap scrub)', () => {
+  it('does not move at all when the finger has not moved', () => {
+    expect(overviewDragToTime(42, 0, 100, 400)).toBe(42);
+  });
+
+  it('dragging right moves forward through the track', () => {
+    // +100px of a 400px strip = a quarter of a 100s track = +25s
+    expect(overviewDragToTime(10, 100, 100, 400)).toBeCloseTo(35);
+  });
+
+  it('dragging left moves backward through the track', () => {
+    expect(overviewDragToTime(50, -100, 100, 400)).toBeCloseTo(25);
+  });
+
+  it('clamps to 0..duration', () => {
+    expect(overviewDragToTime(10, -9999, 100, 400)).toBe(0);
+    expect(overviewDragToTime(90, 9999, 100, 400)).toBe(100);
+  });
+
+  it('falls back to the start position on degenerate width/duration', () => {
+    // A relative mapper must NOT collapse to 0 here: the caller seeks to the
+    // result unconditionally, so returning 0 would yank the playhead to the
+    // start of the track. Standing still is the safe no-op.
+    expect(overviewDragToTime(10, 50, 0, 400)).toBe(10);
+    expect(overviewDragToTime(10, 50, 100, 0)).toBe(10);
   });
 });

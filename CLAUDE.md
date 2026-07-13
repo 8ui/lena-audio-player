@@ -52,7 +52,7 @@ Five layers, each one only talks to the layer directly below it:
    import time; `viewport.ts` has the pure time↔pixel math; `WaveformCanvas`
    is the imperative `<canvas>` renderer + touch gesture handler.
    `MiniMap.tsx` is a second canvas (48px strip under the main waveform)
-   showing the *whole* track — playhead, loop, markers — with tap/drag scrub.
+   showing the *whole* track — playhead, loop, markers — with a *relative* scrub.
    It runs its own rAF loop but deliberately does **not** call `store.tick()`:
    `WaveformCanvas` is the sole ticker (two tickers would double-poll the
    engine clock). It downsamples the full-track peaks to one column per pixel
@@ -114,6 +114,22 @@ changes (`timeToX`/`xToTime` in `waveform/viewport.ts`). Zoom
 (`pxPerSec`) ranges 20–400 px/s (`PX_PER_SEC_MIN`/`MAX`), default 100.
 Touch: 1-finger drag pans (seeks), pausing playback for the gesture and
 resuming on release if it was playing; 2-finger pinch zooms `pxPerSec`.
+
+The **minimap** scrubs *relatively*: touching it does nothing, and the playhead
+then moves by the finger's delta (finger right = forward), with a `SLOP_PX`
+dead-zone so a bare tap is a complete no-op (an absolute jump-to-tap was
+unusable — on a 48px strip a 3mm miss is ~20s). Its gesture state machine is a
+**pure reducer** (`waveform/minimapGesture.ts`) and is unit-tested; the canvas is
+only a DOM adapter. It landed there because every version of that handler shipped
+a HIGH bug (a dead-lock, then a stale-`playing` inversion) and all of them were
+pure logic.
+
+**Touch handlers on either canvas must use `e.targetTouches`** — fingers that
+started on *this* element — and never `e.touches`, which counts every finger on
+the screen. A finger resting on the minimap plus a finger on the waveform made
+`e.touches.length === 2` and silently put the waveform into pinch-zoom. Both
+canvases also register `touchcancel`, or a cancelled gesture strands playback
+paused forever.
 
 ## Gotchas / non-obvious
 

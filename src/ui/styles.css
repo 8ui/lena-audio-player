@@ -1,6 +1,18 @@
 :root { --touch: 48px; }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, sans-serif; background: #12141a; color: #eee; }
+body { margin: 0; font-family: system-ui, sans-serif; background: #12141a; color: #eee;
+  /* Touch-only app: a long-press must never raise iOS's copy/share callout,
+     nothing here is text to select, and taps must not flash grey (buttons
+     already give feedback via button:active below). These are inherited, so
+     body is the right place — the canvases need no rule of their own. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent; }
+/* Inherited `user-select: none` has historically broken the caret/selection
+   inside form controls on iOS Safari. Nothing needs it today, but marker-label
+   editing is the obvious next feature. */
+input, textarea { -webkit-user-select: auto; user-select: auto; }
 button { min-width: var(--touch); min-height: var(--touch); font-size: 18px;
   border: none; border-radius: 12px; background: #2a2e3a; color: #eee; }
 button:active { background: #3a4050; }

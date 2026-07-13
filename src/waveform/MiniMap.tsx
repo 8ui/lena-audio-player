@@ -1,7 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '../store/usePlayerStore';
-import { overviewTimeToX, overviewXToTime } from './viewport';
+import { overviewTimeToX } from './viewport';
 import { downsamplePeaks } from './computePeaks';
+import {
+  idleGesture,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+  type GestureState,
+  type GestureCtx,
+  type GestureEffects,
+} from './minimapGesture';
 import type { Marker } from '../types';
 
 export function MiniMap() {
@@ -145,63 +154,70 @@ export function MiniMap() {
     return () => cancelAnimationFrame(raf);
   }, [store]);
 
-  // Gestures: tap or drag anywhere on the strip seeks to that point in the track.
+  // Gestures: RELATIVE scrub, driven by the pure reducer in ./minimapGesture.
+  // Touching the strip changes nothing — the playhead stays put and then moves
+  // BY the finger's delta (finger right => forward). Absolute "jump to where you
+  // tapped" was unusable: on a 48px strip a 3mm miss threw you ~20s away.
   //
-  // Tracked by Touch.identifier, NOT by e.touches.length: MiniMap only receives
-  // events for touches that STARTED on it, so a second finger landing on the
-  // sibling WaveformCanvas never shows up in a length check — a length-based
-  // onEnd would bail forever, leaving the strip dead with playback stuck paused.
-  //
-  // Pause is deferred to the first touchmove so a bare tap is a single seek
-  // (pausing on touchstart would restart the audio source twice: pause + play).
+  // All the logic lives in the reducer so it can be unit-tested without a canvas
+  // (identifier matching, the slop threshold, anchor-after-pause ordering, the
+  // natural-end race) — every bug this handler has ever shipped was one of those.
+  // This effect is only the DOM adapter: event -> reducer -> apply effects.
   useEffect(() => {
     const canvas = canvasRef.current!;
-    let activeId: number | null = null;
-    let pausedByDrag = false;
-    let wasPlaying = false;
+    let g: GestureState = idleGesture;
 
-    const seekToClientX = (clientX: number) => {
+    const apply = (effects: GestureEffects) => {
       const s = store.getState();
-      const rect = canvas.getBoundingClientRect();
-      s.seek(overviewXToTime(clientX - rect.left, s.duration, rect.width));
+      if (effects.pause || effects.resume) s.togglePlay();
+      if (effects.seek !== undefined) s.seek(effects.seek);
     };
 
-    const findActive = (list: TouchList): Touch | null => {
-      if (activeId === null) return null;
-      for (let i = 0; i < list.length; i++) {
-        if (list[i].identifier === activeId) return list[i];
-      }
+    const ctx = (): GestureCtx => {
+      const s = store.getState();
+      return {
+        playing: s.playing,
+        position: s.position,
+        duration: s.duration,
+        width: canvas.getBoundingClientRect().width,
+      };
+    };
+
+    const ids = (list: TouchList): number[] => {
+      const out: number[] = [];
+      for (let i = 0; i < list.length; i++) out.push(list[i].identifier);
+      return out;
+    };
+    const find = (list: TouchList, id: number | null): Touch | null => {
+      if (id === null) return null;
+      for (let i = 0; i < list.length; i++) if (list[i].identifier === id) return list[i];
       return null;
     };
 
     const onStart = (e: TouchEvent) => {
-      if (activeId !== null) return; // already tracking a finger on the strip
       const t = e.changedTouches[0];
       if (!t) return;
-      activeId = t.identifier;
-      wasPlaying = store.getState().playing;
-      pausedByDrag = false;
-      seekToClientX(t.clientX);
+      const step = onTouchStart(g, t.identifier, t.clientX);
+      g = step.state;
+      apply(step.effects);
     };
 
     const onMove = (e: TouchEvent) => {
-      const t = findActive(e.touches);
+      // targetTouches, not touches — fingers that started on THIS canvas (see
+      // CLAUDE.md). Matching by identifier already made this safe, but the rule
+      // holds for both canvases so nobody copies the pattern without the guard.
+      const t = find(e.targetTouches, g.activeId);
       if (!t) return;
       e.preventDefault();
-      // First actual movement: this is a scrub, not a tap — pause for it.
-      if (!pausedByDrag && wasPlaying) {
-        store.getState().togglePlay();
-        pausedByDrag = true;
-      }
-      seekToClientX(t.clientX);
+      const step = onTouchMove(g, t.identifier, t.clientX, ctx());
+      g = step.state;
+      apply(step.effects);
     };
 
     const onEnd = (e: TouchEvent) => {
-      if (!findActive(e.changedTouches)) return; // not our finger
-      if (pausedByDrag && wasPlaying) store.getState().togglePlay();
-      activeId = null;
-      pausedByDrag = false;
-      wasPlaying = false;
+      const step = onTouchEnd(g, ids(e.changedTouches));
+      g = step.state;
+      apply(step.effects);
     };
 
     canvas.addEventListener('touchstart', onStart, { passive: false });

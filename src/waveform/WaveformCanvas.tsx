@@ -107,50 +107,60 @@ export function WaveformCanvas() {
     const dist = (t: TouchList) =>
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
+    // e.targetTouches, NEVER e.touches: `touches` counts every finger on the
+    // SCREEN, not just those that started on this canvas. A finger resting on
+    // the sibling MiniMap (relative scrub means long holds there are normal)
+    // plus a finger landing here made length === 2 -> this canvas entered pinch
+    // mode and computed pinchStartDist between a minimap finger and a waveform
+    // finger, so any further movement silently zoomed pxPerSec.
     const onStart = (e: TouchEvent) => {
       const s = store.getState();
-      if (e.touches.length === 1 && mode === 'none') {
+      if (e.targetTouches.length === 1 && mode === 'none') {
         mode = 'pan';
-        lastX = e.touches[0].clientX;
+        lastX = e.targetTouches[0].clientX;
         wasPlaying = s.playing;
         if (wasPlaying) s.togglePlay();
-      } else if (e.touches.length === 2) {
+      } else if (e.targetTouches.length === 2) {
         mode = 'pinch';
-        pinchStartDist = Math.max(1, dist(e.touches));
+        pinchStartDist = Math.max(1, dist(e.targetTouches));
         pinchStartPx = s.pxPerSec;
       }
     };
     const onMove = (e: TouchEvent) => {
       e.preventDefault();
       const s = store.getState();
-      if (mode === 'pan' && e.touches.length === 1) {
-        const x = e.touches[0].clientX;
+      if (mode === 'pan' && e.targetTouches.length === 1) {
+        const x = e.targetTouches[0].clientX;
         const dt = -(x - lastX) / s.pxPerSec;
         lastX = x;
         s.seek(Math.max(0, Math.min(s.position + dt, s.duration)));
-      } else if (mode === 'pinch' && e.touches.length === 2) {
-        const factor = dist(e.touches) / pinchStartDist;
+      } else if (mode === 'pinch' && e.targetTouches.length === 2) {
+        const factor = dist(e.targetTouches) / pinchStartDist;
         s.setPxPerSec(clampPxPerSec(pinchStartPx * factor));
       }
     };
     const onEnd = (e: TouchEvent) => {
-      if (e.touches.length === 0) {
+      if (e.targetTouches.length === 0) {
         if (wasPlaying) store.getState().togglePlay();
         mode = 'none';
         wasPlaying = false;
-      } else if (e.touches.length === 1 && mode === 'pinch') {
+      } else if (e.targetTouches.length === 1 && mode === 'pinch') {
         mode = 'pan';
-        lastX = e.touches[0].clientX;
+        lastX = e.targetTouches[0].clientX;
       }
     };
 
     canvas.addEventListener('touchstart', onStart, { passive: false });
     canvas.addEventListener('touchmove', onMove, { passive: false });
     canvas.addEventListener('touchend', onEnd);
+    // Without touchcancel a cancelled pan leaves mode='pan' and wasPlaying=true
+    // — playback would stay paused forever.
+    canvas.addEventListener('touchcancel', onEnd);
     return () => {
       canvas.removeEventListener('touchstart', onStart);
       canvas.removeEventListener('touchmove', onMove);
       canvas.removeEventListener('touchend', onEnd);
+      canvas.removeEventListener('touchcancel', onEnd);
     };
   }, [store]);
 
