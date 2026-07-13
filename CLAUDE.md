@@ -23,9 +23,10 @@ npm test          # vitest run (all tests, once)
 npm run test:watch  # vitest watch mode
 npx vitest run <path>   # single test file, e.g. src/engine/position.test.ts
 npx tsc --noEmit  # type-check only, no build output (separate step from build)
+npm run icons     # regenerate the PWA icons (scripts/gen-icons.mjs, zero deps)
 ```
 
-Currently 12 test files / 62 tests, all passing. **Note:** Type-checking is not part of the build pipeline — run `npx tsc --noEmit` separately if you want to verify types before bundling (esbuild strips types, so `vite build` alone does not catch type errors).
+Currently 14 test files / 81 tests, all passing. **Note:** Type-checking is not part of the build pipeline — run `npx tsc --noEmit` separately if you want to verify types before bundling (esbuild strips types, so `vite build` alone does not catch type errors).
 
 ## Architecture
 
@@ -33,15 +34,17 @@ Five layers, each one only talks to the layer directly below it:
 
 1. **UI** (`src/screens/*`, `src/ui/*`, `src/App.tsx`) — React components.
    `App.tsx` switches between `Library` (import/pick a track) and `Player`
-   (transport, tempo/pitch/loop controls, waveform) based on
-   `currentTrackId`. Components read/act on the store only — never touch the
-   engine or IndexedDB directly.
+   (transport, tempo/pitch/loop/marker controls, waveform, minimap) based on
+   `currentTrackId`, and renders the dismissible error banner. Components
+   read/act on the store only — never touch the engine or IndexedDB directly.
 2. **Store** (`src/store/usePlayerStore.ts`) — a single Zustand store that is
    the sole owner of the `AudioEngine` instance and the sole writer to
    IndexedDB. All UI actions (`togglePlay`, `seek`, `setTempo`, `setPitch`,
-   `setLoopA/B`, `clearLoop`, `setPxPerSec`) go through it. `tick()` polls the
+   `setLoopA/B`, `clearLoop`, `setPxPerSec`, `addMarker`, `removeMarker`,
+   `seekPrev/NextMarker`, `clearError`) go through it. `tick()` polls the
    engine's clock into `position`/`playing` state (driven from
-   `WaveformCanvas`'s rAF loop, not a separate timer).
+   `WaveformCanvas`'s rAF loop, not a separate timer). Decode failures
+   (unsupported/corrupt file) are caught here and surfaced as `error`.
 3. **Engine** (`src/engine/AudioEngine.ts` interface,
    `src/engine/SoundTouchEngine.ts` implementation) — all playback is behind
    the `AudioEngine` interface so the concrete engine is swappable. MVP ships
@@ -58,7 +61,9 @@ Five layers, each one only talks to the layer directly below it:
    engine clock). It downsamples the full-track peaks to one column per pixel
    (`downsamplePeaks`) and caches that array — walking tens of thousands of
    buckets every frame is the thing to avoid; stroking ~`width` segments is
-   cheap. `markers.ts` holds the pure marker math (sort/relabel/nearest).
+   cheap. `markers.ts` holds the pure marker math (sort/relabel/nearest), and
+   `minimapGesture.ts` is the minimap's gesture state machine as a **pure
+   reducer** — unit-tested, with `MiniMap.tsx` reduced to a DOM adapter.
 5. **Storage** (`src/storage/db.ts`) — thin `idb` wrapper, two object stores:
    `tracks` (blob + peaks + duration, keyed by id) and `trackState` (tempo,
    pitch, loop, pxPerSec, markers, lastPosition, keyed by trackId).
@@ -69,17 +74,32 @@ playing) and `vite-plugin-pwa` (manifest + service worker, configured in
 
 ### What's tested vs. what's manually verified
 
-The **pure-math modules** are the TDD surface and have real unit tests:
+The **pure modules** are the TDD surface and have real unit tests:
 `engine/params.ts` (clamps), `engine/position.ts` (`currentSourceTime`),
-`waveform/viewport.ts`, `waveform/computePeaks.ts`, `storage/db.ts` (via
+`waveform/viewport.ts`, `waveform/computePeaks.ts`, `waveform/markers.ts`,
+`waveform/minimapGesture.ts`, `uuid.ts`, `storage/db.ts` (via
 `fake-indexeddb`), and the store (`usePlayerStore.ts`, with a fake
-`AudioEngine` injected via `__setEngineFactory`).
+`AudioEngine` injected via `__setEngineFactory`). Components with real logic
+(`MarkersControl`, controls, `App`'s error banner) have RTL tests.
 
-The **imperative engine and canvas** (`SoundTouchEngine.ts`,
-`WaveformCanvas.tsx`) have no unit tests — they're verified by `vite build`
-succeeding and manual device checks (real `AudioContext`/`AudioWorkletNode`
-and `<canvas>`/touch events aren't meaningfully testable in jsdom). This is
-intentional, not a coverage gap to close casually.
+The **imperative engine and canvases** (`SoundTouchEngine.ts`,
+`WaveformCanvas.tsx`, `MiniMap.tsx`) have no unit tests — they're verified by
+`vite build` succeeding and manual device checks (real
+`AudioContext`/`AudioWorkletNode` and `<canvas>`/touch events aren't
+meaningfully testable in jsdom). This is intentional, not a coverage gap to
+close casually.
+
+**Push logic OUT of the canvases.** The minimap's gesture handler shipped a HIGH
+bug in every version it had while the logic lived inside the component (a
+dead-lock, then a stale-`playing` inversion) — and every one of those bugs was
+pure logic: identifier matching, ordering, a threshold, a state race. It is now
+a pure reducer (`minimapGesture.ts`) with the component as a thin DOM adapter,
+and those bugs are pinned by tests. Do the same for the next gesture.
+
+**What tests structurally cannot cover here** (so don't trust green CI alone):
+audio actually being audible, `WORKLET_URL`/`base` correctness (vitest forces
+`base: '/'` — see gotcha 8), stretch quality and latency, real touch gestures,
+PWA install/offline, wake lock. All device-only.
 
 ## Engine rules (SoundTouchEngine)
 
