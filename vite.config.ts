@@ -57,5 +57,9 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
+    // Needed for src/ui/theme.test.ts's `import css from './styles.css?raw'`:
+    // without this, a `?raw` import resolves to '' under vitest instead of the
+    // file's actual text.
+    css: true,
   },
 });

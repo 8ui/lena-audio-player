@@ -1,22 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { THEMES, loadThemeName, applyTheme, activePalette, type ThemeName, type Palette } from './theme';
-
-// 'node:fs' has no ambient type here without a project @types/node dependency
-// — see the minimal shim in src/vite-env.d.ts.
-
-// NB: `import.meta.url` is pulled into a variable before being passed to
-// `new URL(...)`. Vite statically special-cases the literal expression
-// `new URL('./x', import.meta.url)` as its browser asset-URL pattern and
-// rewrites `import.meta.url` to `'' + self.location` under the jsdom test
-// environment (this file also needs jsdom, for `document`/`localStorage`
-// below, so forcing a plain-node test environment for the whole file is not
-// an option). That rewrite makes `new URL(...)` produce a non-`file:` URL,
-// and `readFileSync` throws "The URL must be of scheme file". Breaking the
-// literal pattern here sidesteps the rewrite; the resolved path and the
-// test's assertions are unchanged.
-const here = import.meta.url;
-const css = readFileSync(new URL('./styles.css', here), 'utf8');
+import css from './styles.css?raw';
 
 const kebab = (k: string): string => k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
 
