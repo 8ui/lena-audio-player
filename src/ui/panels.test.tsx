@@ -54,6 +54,12 @@ describe('LoopPanel', () => {
     fireEvent.click(screen.getByText('A'));
     expect(usePlayerStore.getState().loopStart).toBe(42);
     expect(screen.getByText('A 0:42')).toBeInTheDocument();
+    // Only A is set so far — reset must still be disabled (guards `&&` vs `||`).
+    expect(screen.getByText('Сброс')).toBeDisabled();
+
+    fireEvent.click(screen.getByText('B'));
+    expect(usePlayerStore.getState().loopEnd).toBe(42);
+    expect(screen.getByText('B 0:42')).toBeInTheDocument();
   });
 
   it('clears the loop', () => {
@@ -83,5 +89,13 @@ describe('MarkersPanel', () => {
     expect(screen.getByLabelText('следующий маркер')).toBeDisabled();
     expect(screen.getByLabelText('предыдущий маркер')).toBeDisabled();
     expect(screen.getByLabelText('удалить маркер')).toBeDisabled();
+  });
+
+  it('enables nav/delete once a marker exists', () => {
+    render(<MarkersPanel />);
+    fireEvent.click(screen.getByText('＋ маркер'));
+    expect(screen.getByLabelText('следующий маркер')).not.toBeDisabled();
+    expect(screen.getByLabelText('предыдущий маркер')).not.toBeDisabled();
+    expect(screen.getByLabelText('удалить маркер')).not.toBeDisabled();
   });
 });
