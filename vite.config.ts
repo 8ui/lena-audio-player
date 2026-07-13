@@ -24,6 +24,14 @@ export default defineConfig({
       workbox: { globPatterns: ['**/*.{js,css,html,png,svg}'] },
     }),
   ],
+  // Device testing runs the app on a phone through a cloudflared quick tunnel,
+  // which serves it from a *.trycloudflare.com host over trusted HTTPS. Vite
+  // rejects unknown Host headers with a 403, so allow that suffix. HTTPS is not
+  // a nicety here: service workers, PWA install and navigator.wakeLock are all
+  // secure-context gated, and a plain-HTTP LAN origin silently disables them
+  // (it also hid crypto.randomUUID — see src/uuid.ts).
+  server: { allowedHosts: ['.trycloudflare.com'] },
+  preview: { allowedHosts: ['.trycloudflare.com'] },
   test: {
     globals: true,
     environment: 'jsdom',
