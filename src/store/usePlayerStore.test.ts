@@ -28,7 +28,7 @@ describe('player store', () => {
     usePlayerStore.setState({
       library: [], currentTrackId: null, peaks: null, duration: 0,
       playing: false, position: 0, tempo: 1, pitch: 0,
-      loopStart: null, loopEnd: null, pxPerSec: 100, error: null,
+      loopStart: null, loopEnd: null, pxPerSec: 100, error: null, markers: [],
     });
   });
 
@@ -170,5 +170,59 @@ describe('player store', () => {
     usePlayerStore.setState({ error: 'boom' });
     usePlayerStore.getState().clearError();
     expect(usePlayerStore.getState().error).toBeNull();
+  });
+
+  it('addMarker places a marker at the current position and labels it', () => {
+    usePlayerStore.setState({ position: 5, markers: [] });
+    usePlayerStore.getState().addMarker();
+    const { markers } = usePlayerStore.getState();
+    expect(markers).toHaveLength(1);
+    expect(markers[0].time).toBe(5);
+    expect(markers[0].label).toBe('1');
+  });
+
+  it('addMarker keeps markers sorted and relabeled', () => {
+    usePlayerStore.setState({ markers: [] });
+    usePlayerStore.setState({ position: 9 });
+    usePlayerStore.getState().addMarker();
+    usePlayerStore.setState({ position: 3 });
+    usePlayerStore.getState().addMarker();
+    expect(usePlayerStore.getState().markers.map((m) => [m.time, m.label])).toEqual([
+      [3, '1'],
+      [9, '2'],
+    ]);
+  });
+
+  it('removeMarker drops the marker nearest the playhead', () => {
+    usePlayerStore.setState({
+      markers: [
+        { id: 'a', time: 2, label: '1' },
+        { id: 'b', time: 8, label: '2' },
+      ],
+      position: 8.2,
+    });
+    usePlayerStore.getState().removeMarker();
+    expect(usePlayerStore.getState().markers.map((m) => m.time)).toEqual([2]);
+  });
+
+  it('seekNextMarker seeks to the next marker after position', () => {
+    usePlayerStore.setState({
+      markers: [
+        { id: 'a', time: 2, label: '1' },
+        { id: 'b', time: 8, label: '2' },
+      ],
+      position: 3,
+    });
+    usePlayerStore.getState().seekNextMarker();
+    expect(usePlayerStore.getState().position).toBe(8);
+  });
+
+  it('seekPrevMarker is a no-op when no marker precedes position', () => {
+    usePlayerStore.setState({
+      markers: [{ id: 'a', time: 8, label: '1' }],
+      position: 3,
+    });
+    usePlayerStore.getState().seekPrevMarker();
+    expect(usePlayerStore.getState().position).toBe(3);
   });
 });

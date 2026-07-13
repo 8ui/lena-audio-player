@@ -12,7 +12,7 @@ button:active { background: #3a4050; }
 .control { padding: 12px; }
 .control-row { display: flex; gap: 12px; align-items: center; }
 .control input[type="range"] { width: 100%; height: var(--touch); }
-.stepper, .loop { display: flex; gap: 12px; }
+.stepper, .loop, .markers { display: flex; gap: 12px; }
 .stepper button { flex: 1; font-size: 28px; }
 .reset { min-width: auto; padding: 8px 12px; font-size: 14px; background: transparent; }
 .library-item { display: flex; align-items: center; min-height: 64px; padding: 0 16px;

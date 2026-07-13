@@ -3,7 +3,7 @@ id: 2026-07-12-m1-decode-error-handling
 title: "M1: decode error handling"
 type: bug
 pipeline: minimal
-phase: review
+phase: done
 created: 2026-07-12
 updated: 2026-07-12
 blocked_by: null
@@ -23,6 +23,7 @@ _2-5 строк: что делаем и зачем. Задача этой сек
 - 2026-07-12: triage — pipeline `minimal`, reason: Display-only bugfix, ~3 trivial files (store field + App banner). decodeAudioData reject unhandled in importFile/openTrack -> silent failure on unsupported/corrupt audio.
 - 2026-07-12: impl complete: try/catch on both decode sites + store error/clearError + App banner; 39/39 tests (5 new), tsc clean, build OK
 - 2026-07-12: review passed (high effort, 3 low findings): #1 test stub leak FIXED (afterEach restore); #2 rec==null silent -> debt; #3 dup catch -> intentional (different messages). 39/39, tsc clean. Awaiting user commit approval.
+- 2026-07-12: committed to main: 9975c3e (M1 fix) + 503a42e (handoff). 39/39, tsc clean, build OK.
 
 ## Decisions
 

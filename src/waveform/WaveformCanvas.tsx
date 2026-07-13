@@ -25,7 +25,7 @@ export function WaveformCanvas() {
 
       const s = store.getState();
       if (s.playing) s.tick();
-      const { peaks, position, pxPerSec, loopStart, loopEnd, duration } = store.getState();
+      const { peaks, position, pxPerSec, loopStart, loopEnd, duration, markers } = store.getState();
 
       // loop region
       if (loopStart !== null && loopEnd !== null) {
@@ -67,6 +67,22 @@ export function WaveformCanvas() {
       g.moveTo(cssW / 2, 0);
       g.lineTo(cssW / 2, cssH);
       g.stroke();
+
+      // markers (drawn after the playhead so a marker at the current position
+      // shows its amber tick over the centered red playhead line)
+      for (const m of markers) {
+        const x = timeToX(m.time, position, pxPerSec, cssW);
+        if (x < 0 || x > cssW) continue;
+        g.strokeStyle = '#ffcf5a';
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(x, 0);
+        g.lineTo(x, cssH);
+        g.stroke();
+        g.fillStyle = '#ffcf5a';
+        g.font = '12px system-ui, sans-serif';
+        g.fillText(m.label, x + 3, 14);
+      }
 
       raf = requestAnimationFrame(draw);
     };

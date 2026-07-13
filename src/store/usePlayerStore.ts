@@ -5,7 +5,13 @@ import { clampTempo, clampSemitones } from '../engine/params';
 import { computePeaks } from '../waveform/computePeaks';
 import { clampPxPerSec, PX_PER_SEC_DEFAULT } from '../waveform/viewport';
 import * as db from '../storage/db';
-import type { TrackRecord } from '../types';
+import type { TrackRecord, Marker } from '../types';
+import {
+  insertMarker,
+  removeNearestMarker,
+  nextMarkerTime,
+  prevMarkerTime,
+} from '../waveform/markers';
 
 let sharedCtx: AudioContext | null = null;
 function ctx(): AudioContext {
@@ -42,6 +48,7 @@ interface PlayerState {
   loopEnd: number | null;
   pxPerSec: number;
   error: string | null;
+  markers: Marker[];
 
   init(): Promise<void>;
   importFile(file: File): Promise<void>;
@@ -57,6 +64,10 @@ interface PlayerState {
   setLoopB(): void;
   clearLoop(): void;
   setPxPerSec(v: number): void;
+  addMarker(): void;
+  removeMarker(): void;
+  seekPrevMarker(): void;
+  seekNextMarker(): void;
   tick(): void;
 }
 
@@ -72,7 +83,7 @@ function persistNow(): Promise<void> | undefined {
     loopStart: s.loopStart,
     loopEnd: s.loopEnd,
     pxPerSec: s.pxPerSec,
-    markers: [],
+    markers: s.markers,
     lastPosition: s.position,
   });
 }
@@ -110,6 +121,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   loopEnd: null,
   pxPerSec: PX_PER_SEC_DEFAULT,
   error: null,
+  markers: [],
 
   async init() {
     set({ library: await db.listTracks() });
@@ -169,6 +181,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       pxPerSec: clampPxPerSec(st.pxPerSec),
       position: st.lastPosition,
       playing: false,
+      markers: st.markers,
     });
   },
 
@@ -184,7 +197,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // Reset directly (not via closeTrack) — closeTrack flushes a persist,
       // which would rewrite trackState for the id we just deleted.
       engine?.pause();
-      set({ currentTrackId: null, playing: false, peaks: null, position: 0 });
+      set({ currentTrackId: null, playing: false, peaks: null, position: 0, markers: [] });
     }
     set({ library: await db.listTracks() });
   },
@@ -194,7 +207,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // track's values — this is what saves the leave-position.
     flushPersist();
     engine?.pause();
-    set({ currentTrackId: null, playing: false, peaks: null, position: 0 });
+    set({ currentTrackId: null, playing: false, peaks: null, position: 0, markers: [] });
   },
 
   togglePlay() {
@@ -253,6 +266,33 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setPxPerSec(v) {
     set({ pxPerSec: clampPxPerSec(v) });
     persist();
+  },
+
+  addMarker() {
+    const { position, markers } = get();
+    const m: Marker = { id: crypto.randomUUID(), time: position, label: '' };
+    set({ markers: insertMarker(markers, m) });
+    persist();
+  },
+
+  removeMarker() {
+    const { position, markers } = get();
+    const next = removeNearestMarker(markers, position);
+    if (next === markers) return; // nothing within threshold — no write
+    set({ markers: next });
+    persist();
+  },
+
+  seekPrevMarker() {
+    const { markers, position } = get();
+    const t = prevMarkerTime(markers, position);
+    if (t !== null) get().seek(t);
+  },
+
+  seekNextMarker() {
+    const { markers, position } = get();
+    const t = nextMarkerTime(markers, position);
+    if (t !== null) get().seek(t);
   },
 
   tick() {

@@ -4,6 +4,7 @@ import { TransportBar } from '../ui/TransportBar';
 import { TempoControl } from '../ui/TempoControl';
 import { PitchControl } from '../ui/PitchControl';
 import { LoopControls } from '../ui/LoopControls';
+import { MarkersControl } from '../ui/MarkersControl';
 
 export function Player() {
   const closeTrack = usePlayerStore((s) => s.closeTrack);
@@ -16,6 +17,7 @@ export function Player() {
       <TempoControl />
       <PitchControl />
       <LoopControls />
+      <MarkersControl />
       <TransportBar />
     </div>
   );
