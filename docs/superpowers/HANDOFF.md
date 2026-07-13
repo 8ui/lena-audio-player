@@ -1,139 +1,133 @@
-# Handoff — Lena Audio Player (пост-ревью → доводка)
+# Handoff — Lena Audio Player (Этап-2 → device-тест)
 
-**Обновлено:** 2026-07-11
-**Статус:** MVP реализован, слит в `main`, **код-ревью пройдено**. Автотесты/типы/сборка зелёные (перепроверено в этой сессии). Ручная проверка на телефоне ещё НЕ выполнена — это главный оставшийся гейт.
+**Обновлено:** 2026-07-13
+**Статус:** MVP + M1-фикс + Этап-2 (маркеры, мини-карта) реализованы и закоммичены. Автотесты/типы/сборка зелёные. **Гейт: ручной прогон на телефоне — до сих пор НЕ выполнен.**
 
 ## Что это
 
-Мобильная PWA для пианиста: снимать произведения на слух. Замедление/ускорение без изменения тона, транспонирование, A-B луп, крупный движущийся waveform, офлайн-библиотека. Только телефон, portrait.
+Мобильная PWA для пианиста: снимать произведения на слух. Замедление/ускорение без изменения тона, транспонирование, A-B луп, крупный движущийся waveform, мини-карта, маркеры, офлайн-библиотека. Только телефон, portrait.
 
 ## Где мы сейчас
 
-- **`main` @ `01a06e0`**, впереди `origin/main` на 21 коммит — **НЕ запушено** (был локальный merge, не PR). Запушить: `git push origin main`.
-- Перепроверено в этой сессии: `npm test` → **34/34**, `npx tsc --noEmit` → чисто, `npx vite build` → PWA (`sw.js` + manifest + 10 precache, ~281 KiB). Все три «зелёных» claim подтверждены.
-- Код-ревью по всем 5 слоям проведено. Вердикт: **блокеров MVP нет**, все 8 ранее заявленных фиксов — реальные (проверены в коде). Гейт — ручной прогон на устройстве.
+- **`main` @ `8055003`**, впереди `origin/main` на **26 коммитов** — **НЕ запушено**. Запушить: `git push origin main`.
+- **62/62 тестов** (12 файлов) · `npx tsc --noEmit` чисто · `npx vite build` OK (PWA: sw + manifest + 10 precache).
 
-## Результаты ревью
+### Сделано в последнюю сессию
 
-### 8 заявленных фиксов — все настоящие
-
-| # | Баг | Фикс |
+| Задача | Коммит | Что |
 |---|---|---|
-| 1 | onended гонка | `SoundTouchEngine.ts:160` guard по идентичности ноды |
-| 2 | load() не сбрасывал playing | `SoundTouchEngine.ts:47` |
-| 3 | утечка ноды при replay | `SoundTouchEngine.ts:139` `stopInternal()` в старте source |
-| 4 | pan→pinch залипал pause | `WaveformCanvas.tsx:115-124` `wasPlaying` живёт через pan→pinch |
-| 5 | degenerate pinch → NaN | `WaveformCanvas.tsx:98` `Math.max(1,dist)` + clamp |
-| 6 | persist не флашился на nav | `usePlayerStore.ts:90-96` flush в close/open, cancel в remove |
-| 7 | дрейф waveform на 44.1кГц | `WaveformCanvas.tsx:45` `duration/(peaks.length/2)` |
-| 8 | zustand v5 без useShallow | `LoopControls.tsx:8`, `TransportBar.tsx:13` |
+| M1 decode-ошибки | `9975c3e` | `try/catch` на обоих decode-сайтах + store `error` + дизмиссимый баннер. Битый/неподдерживаемый файл больше не падает молча. |
+| #1 Маркеры | `fcc9878` | Пур-логика `waveform/markers.ts` (sort/relabel/nearest/prev-next); стор `addMarker`/`removeMarker`/`seekPrev`/`seekNextMarker` + persist/restore; `MarkersControl` UI; янтарные тики на волне. |
+| #2 Мини-карта | `8055003` | 48px стрип под волной: вся дорожка + playhead + луп + маркеры, тап/драг = seek. `downsamplePeaks` + `overviewTimeToX/XToTime` (пур). Кеш колонок вместо обхода full-track пиков каждый кадр. Попутно: фикс дробного dpr в `WaveformCanvas` (реаллокация бэкинг-стора 60/с на Android). |
 
-### Новые находки ревью (НЕ были в follow-ups)
+## ⚠️ ГЛАВНОЕ: почему device-тест — блокер
 
-- **M1 (медиум) — тихий фейл декодирования.** `importFile`/`openTrack` (`usePlayerStore.ts:115,131`) не оборачивают `decodeAudioData`. `accept="audio/*"` пускает форматы, которые движок телефона не декодирует (часть m4a, битый файл) → промис реджектится → трек не добавлен/не открыт, юзеру **ничего не показано** (`void importFile(f)` в `Library.tsx:31` глотает реджект). Ломает core-флоу «импорт с телефона» молча. **Рекомендую поднять первой** — единственная находка, бьющая по core-UX. Фикс: try/catch + user-facing ошибка (toast/alert).
-- **m2 (минор) — removeTrack рубит чужой pending-write.** `removeTrack` (`usePlayerStore.ts:161`) безусловно `clearTimeout` persist-таймера. Удаление трека Y из библиотеки во время игры X с pending-записью → правка X, сделанная <400мс назад, теряется. Узкий edge.
-- **m3 (перф-заметка) — tick() = set() каждый кадр.** `tick` (`usePlayerStore.ts:241`) пишет `position` 60/с → подписчики (TransportBar и др.) ре-рендерятся 60fps. Для MVP ок.
+**Маркеры и мини-карта — touch-only.** Обработчики слушают `touchstart/touchmove/touchend`; мышь на десктопе их не шлёт. Значит **ни один жест обеих новых фич никогда не проверялся на живом устройстве**. Юнит-тесты покрывают только пур-математику — canvas и жесты по политике проекта верифицируются руками.
 
-### «DnD на волне не работает» — разобрано, НЕ баг
+Плюс с MVP не проверялись: качество растяжки, латентность, батарея, offline-запуск, установка на домашний экран.
 
-Жесты слушают только `touchstart/touchmove/touchend` (`WaveformCanvas.tsx:126-128`). На десктопе мышь touch-события не шлёт → drag мышью молчит. На телефоне пальцем — работает. Root cause = отсутствие mouse/pointer-обработчиков, а не поломка пана.
-**Опционально (не блокер):** мигрировать жесты на Pointer Events (`pointerdown/move/up`, активные указатели в `Map` для pinch) — тогда drag тестируется и на десктопе, код унифицируется. Полезно для dev-цикла без телефона.
+## Device-чеклист
 
-## Следующий этап — план работ (по приоритету)
+```bash
+npm run dev -- --host    # открыть выданный http://192.168.x.x:5173 на телефоне
+```
 
-1. **Ручная проверка на устройстве** (iOS Safari + Android Chrome) — device-чеклист ниже. Единственный гейт MVP.
-2. **M1: обработка ошибок декода** — try/catch в `importFile`/`openTrack` + видимая ошибка юзеру.
-3. **(опц.) Pointer Events для waveform** — чтобы drag работал/тестировался на десктопе.
-4. **Follow-ups (долг, не блокеры)** — см. список ниже, брать пачкой при желании.
-5. **`git push origin main`** — когда доводка устроит.
+**База (с MVP):**
+- [ ] Импорт аудио → трек в библиотеке.
+- [ ] Открыть → waveform рисуется, playhead по центру.
+- [ ] Play → волна едет влево, звук играет; playhead↔звук синхронны.
+- [ ] Темп 0.5× → полскорости, тон не меняется; скролл волны совпадает.
+- [ ] Питч −3 → ниже тон, скорость та же.
+- [ ] Drag волны пальцем → скраб; pinch → зум (20–400); A-B луп → повторяет регион.
+- [ ] Назад в библиотеку, переоткрыть → темп/питч/луп/позиция восстановлены.
+- [ ] Импорт битого/неподдерживаемого файла → **красный баннер сверху** (M1), тап скрывает.
 
-Каждая задача этого этапа проходит через `run-task-pipeline` (проект требует): brainstorm → триаж пресета → impl → review. M1 — тип `bug`, идёт через `systematic-debugging`.
+**Маркеры (НОВОЕ, ни разу не тестировано):**
+- [ ] «＋ маркер» ставит янтарный тик с номером на волне, на позиции playhead.
+- [ ] Несколько маркеров нумеруются 1..N по времени (не по порядку добавления).
+- [ ] ◀/▶ прыгают на предыдущий/следующий маркер.
+- [ ] «− маркер» убирает ближайший (в пределах ~1с); вдали от маркеров — ничего не делает.
+- [ ] Кнопки ◀/▶/− задизейблены, когда маркеров нет.
+- [ ] Переоткрыть трек → маркеры восстановились.
 
-## Device-чеклист (ручная проверка, нельзя закрыть юнит-тестом)
+**Мини-карта (НОВОЕ, ни разу не тестировано):**
+- [ ] Стрип 48px под волной показывает волну ВСЕЙ дорожки.
+- [ ] Красный playhead едет слева направо по стрипу во время игры.
+- [ ] A-B луп подсвечен; маркеры — янтарные тики поверх playhead.
+- [ ] Тап по стрипу → прыжок туда (без слышимого двойного рестарта).
+- [ ] Драг вдоль стрипа → скраб; на отпускании воспроизведение продолжается, если играло.
+- [ ] **Крайний кейс из ревью:** начать драг на мини-карте → положить второй палец на большую волну → поднять оба. Стрип должен остаться живым (это был бы дедлок, если бы жесты считали пальцы, а не трекали identifier).
 
-- Импорт аудио → трек в библиотеке.
-- Открыть → waveform рисуется, playhead по центру.
-- Play → волна едет влево, звук играет; playhead↔звук синхронны.
-- Темп 0.5 → полскорости, тон не меняется; скролл волны совпадает.
-- Питч −3 → ниже тон, скорость та же.
-- Drag волны пальцем → скраб; pinch → зум (20–400); A-B луп → повторяет регион.
-- Назад в библиотеку, переоткрыть → темп/питч/луп/позиция восстановлены.
-- PWA: `npm run build && npm run preview` → установка на домашний экран; offline после первой загрузки → оболочка грузится, треки из IndexedDB играют; экран не гаснет при воспроизведении.
-- Латентность SoundTouch: playhead опережает звук на десятки мс (сильнее на краях диапазона) — оценить, не мешает ли разбору.
-- **Импорт неподдерживаемого/битого файла** → сейчас молчит (M1). После фикса — видимая ошибка.
+**PWA / железо:**
+- [ ] `npm run build && npm run preview` → установка на домашний экран.
+- [ ] Offline после первой загрузки → оболочка грузится, треки из IndexedDB играют.
+- [ ] Экран не гаснет при воспроизведении (wake lock).
+- [ ] **Качество SoundTouch на 0.5×** — слышны ли артефакты? Латентность playhead↔звук?
 
-## Follow-ups (долг, подтверждены ревью как реальные)
+## Решение по Rubberband — ЖДЁТ device-теста
 
-- **wakeLock:** async request vs sync release гонка при быстром play→pause; нет re-acquire на `visibilitychange` (`App.tsx:15-18`, `pwa/wakeLock.ts`).
-- **Луп при B<A:** движок корректно неактивен (`end>start` false), но UI подсвечивает регион и рисует его (`WaveformCanvas.tsx:31`, `LoopControls.tsx:17`) — визуальное рассогласование.
-- **`position.ts`:** при `raw<loopStart` playhead замирает на `loopStart` (достижимо через restore с активным лупом); `Math.min(raw,b)` в `position.ts:18` избыточен.
-- **`db.ts`:** singleton `dbp` не сбрасывается при reject `openDB` (`db.ts:14`); `deleteTrack` — две транзакции, не атомарно (`db.ts:50-54`).
-- **`package.json`:** остатки `npm init` boilerplate (`description`/`main`/`ISC`) + `type:commonjs`; `typescript ^7.0.2` не запинен (lockfile пинит).
-- **Деплой в subpath:** абсолютный `WORKLET_URL='/soundtouch-processor.js'` (`SoundTouchEngine.ts:10`) + нет `base` в `vite.config.ts` → сломает деплой не в корень.
-- **Интеграционный тест restore-пути** (import→persist→reopen) — долг; `openTrack`/`importFile` не гоняются в jsdom (нет AudioContext).
+Rubberband (2-я реализация `AudioEngine` за интерфейсом) сознательно **отложен**. Он лечит «качество растяжки SoundTouch недостаточно» — а подтверждения этой проблемы нет: SoundTouch на устройстве не слушали. Тяжёлый WASM-бандл + риск по батарее ради неподтверждённой проблемы — плохая ставка.
 
-## Ключевые решения (зафиксированы)
+**Развилка после чеклиста:**
+- 0.5× звучит приемлемо → **Rubberband не нужен**, экономим бандл и батарею. Закрываем Этап-2.
+- Слышны артефакты → берём Rubberband, уже зная что чиним (тогда: research WASM-пакетов → брейншторм → пайплайн).
 
-- **Источник аудио:** только локальные файлы с телефона. Без бэкенда, без YouTube.
-- **Движок:** `@soundtouchjs/audio-worklet` за интерфейсом `AudioEngine`. Rubberband — будущая замена, вне MVP.
-  - Темп = `playbackRate` на source И на node (оба одновременно). Питч = `pitchSemitones`.
-  - A-B луп = нативные `source.loop/loopStart/loopEnd`.
-  - Позиция считается формулой (`currentSourceTime`, чистая), НЕ репортится из worklet. Конец трека ловит `source.onended` — guard по идентичности ноды, НЕ boolean-флагом.
-- **Waveform:** кастомный canvas. Playhead фиксирован по центру, волна движется. 1 палец = пан/seek, 2 пальца = pinch-зум (20–400 px/с). `secondsPerBucket = duration/(peaks.length/2)`.
-- **Хранилище:** IndexedDB через `idb`. Записи дебаунсятся 400мс; флашатся при уходе с трека (`closeTrack`/`openTrack`).
-- **Стек:** Vite 8 + React 19 + TS 7 (tsgo) + zustand 5 + idb + vite-plugin-pwa; Vitest 4 + fake-indexeddb + RTL.
-- **Вне MVP:** маркеры UI, мини-карта, Rubberband. Поля маркеров в схеме — schema-only.
+## Что ещё не закрыто (не блокеры)
+
+**Робастность из спеки (раздел «Обработка ошибок»), 3.5 из 5 не сделаны:**
+- Переполнение квоты IndexedDB → catch + «удали старые треки» (`db.ts` без catch).
+- Feature-detect AudioWorklet на старом браузере → сообщение (сейчас белый экран).
+- Долгий `computePeaks` на больших файлах → чанки + индикатор прогресса (сейчас синхронный, морозит UI).
+- iOS suspended `AudioContext` → `ctx.resume()` есть (`SoundTouchEngine.ts:73`), UX «нажми play» нет.
+
+**Долг (в `docs/tasks/*.md`, чекбоксы для `/debts-report`):**
+- `openTrack` при `rec == null` молча возвращает без user-facing ошибки.
+- `addMarker` не дедуплицирует — повторные тапы на одной позиции дают накладывающиеся маркеры.
+- MiniMap: размонтаж посреди drag не резюмит воспроизведение (практически недостижимо).
+- persist→restore маркеров без автотеста (jsdom без AudioContext).
+- wakeLock: гонка async request vs sync release; нет re-acquire на `visibilitychange`.
+- Луп при B<A: движок корректно неактивен, но UI рисует регион — визуальное рассогласование.
+- `db.ts`: singleton `dbp` не сбрасывается при reject `openDB`; `deleteTrack` не атомарен (2 транзакции).
+- Деплой в subpath сломается: абсолютный `WORKLET_URL` + нет `base` в `vite.config.ts`.
+- `package.json`: остатки `npm init` boilerplate.
 
 ## Архитектура (5 слоёв) → файлы
 
 ```
-UI (React)            → src/screens/{Library,Player}.tsx, src/ui/{TransportBar,TempoControl,PitchControl,LoopControls}.tsx, src/App.tsx
+UI (React)            → src/screens/{Library,Player}.tsx,
+                        src/ui/{TransportBar,TempoControl,PitchControl,LoopControls,MarkersControl}.tsx,
+                        src/App.tsx (+ error-баннер)
   ↓
-Store (Zustand)       → src/store/usePlayerStore.ts   (мост engine↔UI↔db; import/open/persist/tick)
+Store (Zustand)       → src/store/usePlayerStore.ts   (мост engine↔UI↔db; import/open/persist/tick/markers/error)
   ↓
 AudioEngine (интерф.) → src/engine/AudioEngine.ts
   ↓
-SoundTouchEngine      → src/engine/SoundTouchEngine.ts (Web Audio; + src/engine/{params,position}.ts чистые)
-Waveform (canvas)     → src/waveform/{WaveformCanvas.tsx, viewport.ts, computePeaks.ts}
+SoundTouchEngine      → src/engine/SoundTouchEngine.ts (+ src/engine/{params,position}.ts чистые)
+Waveform (canvas)     → src/waveform/{WaveformCanvas,MiniMap}.tsx,
+                        src/waveform/{viewport,computePeaks,markers}.ts  (чистые, под тестами)
 Storage (IndexedDB)   → src/storage/db.ts, src/types.ts
-PWA shell + wake lock → vite.config.ts (VitePWA), src/pwa/wakeLock.ts, public/{soundtouch-processor.js,icons/}
+PWA shell + wake lock → vite.config.ts (VitePWA), src/pwa/wakeLock.ts, public/
 ```
+
+**Ключевые инварианты (не сломать):**
+- `WaveformCanvas` — **единственный** владелец `store.tick()`. MiniMap читает `position` из стора, свой tick не зовёт (два тикера дважды опрашивали бы часы движка).
+- Оба canvas читают стор императивно через `store.getState()` в rAF — НЕ через React-селектор (`position` меняется 60/с → ре-рендер каждый кадр).
+- Жесты MiniMap трекают `Touch.identifier`, а НЕ `e.touches.length` (иначе палец на соседнем canvas намертво вешает стрип).
+- `canvas.width` сравнивать через `Math.round(cssW * dpr)` — иначе дробный dpr реаллоцирует бэкинг-стор каждый кадр.
+- zustand v5: мульти-полевой селектор → `useShallow`.
+- `source.onended` — guard по идентичности ноды, НЕ boolean-флагом.
+- Темп = `playbackRate` на source И на node. Позиция считается формулой, не репортится из worklet.
+
+## Процесс
+
+Каждая задача идёт через `run-task-pipeline`: brainstorm → триаж пресета → (plan → plan-review) → impl (TDD) → review (verify + code-review) → done. Task-файлы в `docs/tasks/`, планы в `docs/superpowers/plans/`.
 
 ## Проверки локально
 
 ```bash
 npm ci
-npm test              # 34/34
+npm test              # 62/62
 npx tsc --noEmit      # чисто
-npx vite build        # sw + manifest + иконки
-npm run dev -- --host # ручная проверка (см. device-чеклист)
+npx vite build        # sw + manifest
+npm run dev -- --host # device-тест (см. чеклист)
 ```
-
-## Коммиты по задачам
-
-| Задача | Коммит(ы) |
-|---|---|
-| 1 Scaffold | `d7c23ee` |
-| 2 Engine params | `391ae9c` |
-| 3 Position+loop math | `6d643bf` |
-| 4 Viewport math | `6db4c3a` |
-| 5 computePeaks | `ff0b75c` |
-| 6 Storage IndexedDB | `24ccbf2` |
-| 7 SoundTouchEngine | `3a587cb` + фикс `d66b9e2` |
-| 8 Player store | `a287972` |
-| 9 WaveformCanvas | `3a836fa` + фикс `748e076` |
-| 10 Controls | `9e4206e` |
-| 11 Library | `189fe32` |
-| 12 Player+routing | `31a5fc7` |
-| 13 PWA + wake lock | `cfb7e83` |
-| 14 CLAUDE.md | `c7e3bf0` + фикс `b7ed54c` |
-| Финальный fix-wave | `a2af183` + тест `1d51c37` |
-| Warning-баннеры в план | `01a06e0` |
-
-## Артефакты процесса
-
-Ledger + пер-задачные отчёты implementer/reviewer — локально в `.superpowers/sdd/` (gitignored): `progress.md`, `task-N-report.md`, `final-fix-report.md`, `review-*.diff`. Спека — `docs/superpowers/specs/2026-07-10-audio-player-design.md`, план — `docs/superpowers/plans/2026-07-10-audio-player-mvp.md`.
-
-## CLAUDE.md
-
-В корне репо. Архитектура + раздел «Gotchas» (zustand v5 useShallow, source-identity guard для onended, jsdom-стаб AudioWorkletNode, vite-env.d.ts, vite.config.ts вне tsc-гейта, persist debounce 400мс, мажоры тулчейна). Актуален, выверен по коду.

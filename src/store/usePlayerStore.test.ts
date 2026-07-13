@@ -181,6 +181,27 @@ describe('player store', () => {
     expect(markers[0].label).toBe('1');
   });
 
+  it('addMarker ids come from uuid(), which survives a non-secure origin', () => {
+    // Pins the call site: a raw crypto.randomUUID() here would throw on the
+    // phone (plain-HTTP LAN origin is not a secure context) — the crash that
+    // was actually hit on device. Simulate that origin by removing the method.
+    const real = globalThis.crypto.randomUUID;
+    Object.defineProperty(globalThis.crypto, 'randomUUID', {
+      value: undefined, configurable: true, writable: true,
+    });
+    try {
+      usePlayerStore.setState({ position: 1, markers: [] });
+      usePlayerStore.getState().addMarker();
+      expect(usePlayerStore.getState().markers[0].id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    } finally {
+      Object.defineProperty(globalThis.crypto, 'randomUUID', {
+        value: real, configurable: true, writable: true,
+      });
+    }
+  });
+
   it('addMarker keeps markers sorted and relabeled', () => {
     usePlayerStore.setState({ markers: [] });
     usePlayerStore.setState({ position: 9 });

@@ -12,6 +12,7 @@ import {
   nextMarkerTime,
   prevMarkerTime,
 } from '../waveform/markers';
+import { uuid } from '../uuid';
 
 let sharedCtx: AudioContext | null = null;
 function ctx(): AudioContext {
@@ -139,7 +140,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     const peaks = computePeaks(audioBuffer.getChannelData(0), audioBuffer.sampleRate);
     const rec: TrackRecord = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       name: file.name.replace(/\.[^.]+$/, ''),
       blob: file,
       peaks,
@@ -270,7 +271,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   addMarker() {
     const { position, markers } = get();
-    const m: Marker = { id: crypto.randomUUID(), time: position, label: '' };
+    const m: Marker = { id: uuid(), time: position, label: '' };
     set({ markers: insertMarker(markers, m) });
     persist();
   },
