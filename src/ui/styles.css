@@ -207,7 +207,12 @@ button:disabled { opacity: 0.4; }
   font-size: 24px;
 }
 
-.chips { display: flex; gap: 8px; }
+/* Own stacking context above the backdrop (z-index:10) and popover (z-index:20):
+   .chips is otherwise a plain in-flow element, and a positioned sibling with a
+   z-index paints above any non-positioned in-flow element regardless of source
+   order — so with a panel open the full-viewport .backdrop would silently cover
+   the chip row and swallow every tap meant to switch tabs. */
+.chips { position: relative; z-index: 30; display: flex; gap: 8px; }
 .chips button {
   flex: 1;
   min-width: 0;

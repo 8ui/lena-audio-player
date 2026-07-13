@@ -59,10 +59,11 @@ export function ControlTabs() {
         <button
           role="tab"
           aria-selected={open === 'markers'}
+          aria-label={`Маркеры ⚑ ${markerCount}`}
           className={markerCount > 0 ? 'on' : undefined}
           onClick={() => toggle('markers')}
         >
-          Маркеры ⚑ {markerCount}
+          ⚑ {markerCount}
         </button>
       </div>
     </>
