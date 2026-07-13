@@ -25,11 +25,13 @@ jobs:
         with:
           node-version: 22 # vite 8 needs ^20.19 || >=22.12
           cache: npm
-      # First, and with enablement: creates the Pages site if absent (idempotent)
-      # and fails fast, instead of dying confusingly after a full build.
+      # Runs first so a Pages misconfiguration fails fast, before a full build.
+      #
+      # NOTE: no `enablement: true`. The default GITHUB_TOKEN cannot CREATE a
+      # Pages site — the API rejects it with "Resource not accessible by
+      # integration" — so enablement must happen out of band, once per repo:
+      #   gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - run: npm ci
       # `vite build` runs esbuild and does NOT type-check, so gate on both.
       - run: npx tsc --noEmit
