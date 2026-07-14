@@ -88,5 +88,6 @@ describe('barHeights', () => {
 
   it('returns nothing for a non-positive bar count', () => {
     expect(barHeights(new Float32Array([0, 1]), 0)).toEqual([]);
+    expect(barHeights(new Float32Array([0, 1]), -1)).toEqual([]);
   });
 });
