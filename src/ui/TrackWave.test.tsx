@@ -35,4 +35,15 @@ describe('TrackWave', () => {
     const { container } = render(<TrackWave peaks={peaks} progress={0} />);
     expect(container.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
   });
+
+  // A silent passage must still leave a visible hairline. Without the MIN_HALF
+  // floor these bars collapse to height 0 and the card looks broken.
+  it('gives a silent passage a visible hairline instead of a zero-height bar', () => {
+    const { container } = render(<TrackWave peaks={new Float32Array(400)} progress={0} />);
+    const rects = [...container.querySelectorAll('rect')];
+    expect(rects).toHaveLength(BARS);
+    for (const r of rects) {
+      expect(Number(r.getAttribute('height'))).toBeGreaterThan(0);
+    }
+  });
 });
