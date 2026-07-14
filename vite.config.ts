@@ -35,8 +35,8 @@ export default defineConfig({
         lang: 'ru',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#12141a',
-        theme_color: '#12141a',
+        background_color: '#17150f',
+        theme_color: '#17150f',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -57,5 +57,9 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
+    // Needed for src/ui/theme.test.ts's `import css from './styles.css?raw'`:
+    // without this, a `?raw` import resolves to '' under vitest instead of the
+    // file's actual text.
+    css: true,
   },
 });

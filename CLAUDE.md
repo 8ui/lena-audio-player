@@ -26,7 +26,7 @@ npx tsc --noEmit  # type-check only, no build output (separate step from build)
 npm run icons     # regenerate the PWA icons (scripts/gen-icons.mjs, zero deps)
 ```
 
-Currently 14 test files / 81 tests, all passing. **Note:** Type-checking is not part of the build pipeline — run `npx tsc --noEmit` separately if you want to verify types before bundling (esbuild strips types, so `vite build` alone does not catch type errors).
+Currently 18 test files / 122 tests, all passing. **Note:** Type-checking is not part of the build pipeline — run `npx tsc --noEmit` separately if you want to verify types before bundling (esbuild strips types, so `vite build` alone does not catch type errors).
 
 ## Architecture
 
@@ -34,9 +34,18 @@ Five layers, each one only talks to the layer directly below it:
 
 1. **UI** (`src/screens/*`, `src/ui/*`, `src/App.tsx`) — React components.
    `App.tsx` switches between `Library` (import/pick a track) and `Player`
-   (transport, tempo/pitch/loop/marker controls, waveform, minimap) based on
-   `currentTrackId`, and renders the dismissible error banner. Components
-   read/act on the store only — never touch the engine or IndexedDB directly.
+   based on `currentTrackId`, and renders the dismissible error banner.
+   `Player` (`src/screens/Player.tsx`) composes `PlayerHeader`, a
+   `.wave-wrap` holding `WaveformCanvas` plus `TimeBadge` (an overlay plaque;
+   `pointer-events: none` so a pan gesture starting on it still reaches the
+   canvas), `MiniMap`, and `PlayerDock` = `TempoStepper` + `TransportBar`
+   (play-only now — the old ±5s buttons and the time readout are gone) +
+   `ControlTabs`. `ControlTabs` renders three chips that act as tabs over an
+   overlay popover holding `PitchPanel` / `LoopPanel` / `MarkersPanel`; which
+   tab is open is local React state, never the store, and the popover
+   overlays the waveform rather than resizing it (see Theming and Gotcha 9).
+   Components read/act on the store only — never touch the engine or
+   IndexedDB directly.
 2. **Store** (`src/store/usePlayerStore.ts`) — a single Zustand store that is
    the sole owner of the `AudioEngine` instance and the sole writer to
    IndexedDB. All UI actions (`togglePlay`, `seek`, `setTempo`, `setPitch`,
@@ -64,6 +73,8 @@ Five layers, each one only talks to the layer directly below it:
    cheap. `markers.ts` holds the pure marker math (sort/relabel/nearest), and
    `minimapGesture.ts` is the minimap's gesture state machine as a **pure
    reducer** — unit-tested, with `MiniMap.tsx` reduced to a DOM adapter.
+   Both canvases take every colour from `activePalette()` (`src/ui/theme.ts`,
+   see Theming) once per drawn frame — neither has a hardcoded hex left in it.
 5. **Storage** (`src/storage/db.ts`) — thin `idb` wrapper, two object stores:
    `tracks` (blob + peaks + duration, keyed by id) and `trackState` (tempo,
    pitch, loop, pxPerSec, markers, lastPosition, keyed by trackId).
@@ -75,12 +86,16 @@ playing) and `vite-plugin-pwa` (manifest + service worker, configured in
 ### What's tested vs. what's manually verified
 
 The **pure modules** are the TDD surface and have real unit tests:
-`engine/params.ts` (clamps), `engine/position.ts` (`currentSourceTime`),
-`waveform/viewport.ts`, `waveform/computePeaks.ts`, `waveform/markers.ts`,
-`waveform/minimapGesture.ts`, `uuid.ts`, `storage/db.ts` (via
-`fake-indexeddb`), and the store (`usePlayerStore.ts`, with a fake
-`AudioEngine` injected via `__setEngineFactory`). Components with real logic
-(`MarkersControl`, controls, `App`'s error banner) have RTL tests.
+`engine/params.ts` (clamps, `stepTempo`'s rounding), `engine/position.ts`
+(`currentSourceTime`), `waveform/viewport.ts`, `waveform/computePeaks.ts`,
+`waveform/markers.ts`, `waveform/minimapGesture.ts`, `uuid.ts`,
+`ui/time.ts` (`fmtTime`/`fmtTimeTenths`), `storage/db.ts` (via
+`fake-indexeddb`), and the store (`usePlayerStore.ts`,
+with a fake `AudioEngine` injected via `__setEngineFactory`). `theme.test.ts`
+similarly pins `theme.ts` against `styles.css` (see Theming). Components with
+real logic (`ControlTabs`, `TempoStepper`, the panels, the dock, `App`'s
+error banner) have RTL tests: `ControlTabs.test.tsx`, `TempoStepper.test.tsx`,
+`panels.test.tsx`, `dock.test.tsx`, `App.test.tsx`.
 
 The **imperative engine and canvases** (`SoundTouchEngine.ts`,
 `WaveformCanvas.tsx`, `MiniMap.tsx`) have no unit tests — they're verified by
@@ -151,6 +166,37 @@ the screen. A finger resting on the minimap plus a finger on the waveform made
 canvases also register `touchcancel`, or a cancelled gesture strands playback
 paused forever.
 
+## Theming
+
+`src/ui/theme.ts` is the **single source of colour**: two flat `Palette`
+objects, `warm` (the default) and `studio`. `src/main.tsx` calls
+`applyTheme()` *before* `createRoot(...).render(...)`; it reads the choice
+from `localStorage` (key `razbor.theme`) and stamps it as `<html
+data-theme="warm"|"studio">`. There is deliberately no UI switcher yet — the
+only way to reach `studio` today is
+`localStorage.setItem('razbor.theme', 'studio')` + reload. `src/ui/styles.css`
+mirrors every `Palette` key as a CSS variable under `:root[data-theme=…]`,
+and the canvases read colour via `activePalette()` (a single
+`dataset.theme` read, called once per drawn frame) instead of hardcoding hex.
+
+**Nothing but `theme.test.ts` stops `theme.ts` and `styles.css` from drifting
+apart.** It imports the stylesheet via a Vite `?raw` import (`import css from
+'./styles.css?raw'` — which is why `vite.config.ts`'s `test` block now sets
+`css: true`; without it a `?raw` import resolves to `''` under vitest) and
+asserts every palette key matches its CSS variable, for both themes. Add or
+change a colour in one file without the other and this is the only thing
+that catches it.
+
+`index.html`'s `<html>` tag also carries a **static** `data-theme="warm"` —
+not a leftover, a deliberate default. Every colour variable lives under
+`:root[data-theme=…]`, and the stylesheet is render-blocking while
+`applyTheme()` only runs once `main.tsx`'s deferred module script executes.
+Without the static attribute, first paint has every `--var` unresolved
+(transparent, not the dark background) and the page flashes white before
+repainting dark. `applyTheme()` still overwrites the attribute from
+`localStorage` right after, e.g. to `'studio'` — the static value only needs
+to match `DEFAULT_THEME`.
+
 ## Gotchas / non-obvious
 
 1. **Zustand v5 object-selector infinite loop.** A store selector that
@@ -158,7 +204,7 @@ paused forever.
    from `zustand/react/shallow`, or React throws "getSnapshot should be
    cached" (infinite re-render). Single-field selectors
    (`usePlayerStore((s) => s.tempo)`) are fine as-is. See
-   `src/ui/LoopControls.tsx` and `src/ui/TransportBar.tsx` for the pattern —
+   `src/ui/LoopPanel.tsx` and `src/ui/TransportBar.tsx` for the pattern —
    both select multiple fields via `useShallow(() => ({...}))`.
 2. **`source.onended` must be guarded by identity, not a boolean flag.**
    `SoundTouchEngine.startSource` closes over the specific `src` node and
@@ -215,6 +261,25 @@ paused forever.
    grep -c soundtouch-processor dist/sw.js              # >=1 == precached == offline works
    grep -o 'apple-touch-icon[^>]*' dist/index.html      # href must be rebased
    ```
+9. **`ControlTabs`' popover must stay an overlay, and every row of `.dock`
+   (`.tempo`, `.transport`, `.chips`) must stay positioned above
+   `.backdrop`.** The tab panel (`.popover`, `position: absolute`, floated
+   over the dock) must never become a row in the flex column — putting it
+   back inline would resize/jump the waveform every time a tab opens.
+   Relatedly, `.tempo`, `.transport` and `.chips` all carry
+   `position: relative; z-index: 30;` — load-bearing, not decorative:
+   `.backdrop` (`position: fixed; z-index: 10`, covering the full viewport
+   so a tap outside the popover closes it) paints above any non-positioned
+   in-flow sibling regardless of source order — so without that z-index on
+   a row, the backdrop silently sits on top of it and swallows the first tap
+   meant for it while a panel is open (the tap just closes the panel; the
+   user has to tap again). This bit `.chips` first (tab-switching itself was
+   dead) and then `.tempo`/`.transport` (▶ and the tempo −/+ needed a double
+   tap) — the rule is *every* dock row, not just the tab chips; a new row
+   added to `.dock` needs the same opt-out. jsdom cannot hit-test stacking
+   contexts, so `ControlTabs.test.tsx` asserts the CSS z-order for all three
+   rows by reading `styles.css` directly instead of simulating the
+   click-through.
 
 ## Deploy
 
@@ -228,7 +293,7 @@ appear in the installed app. Platform rule, not a bug.
 
 ## Out of scope for MVP
 
-Marker UI and the mini-map **are** implemented (`src/ui/MarkersControl.tsx`,
+Marker UI and the mini-map **are** implemented (`src/ui/MarkersPanel.tsx`,
 `src/waveform/MiniMap.tsx`); `persistNow` saves the real `markers` array, and
 `openTrack` restores it. A Rubberband-based `AudioEngine` is a possible future
 engine swap; only `SoundTouchEngine` exists today.

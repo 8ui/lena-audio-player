@@ -568,11 +568,17 @@ describe('stepTempo', () => {
     expect(stepTempo(0.9, 1)).toBe(1);
   });
 
-  // 0.75 - 0.1 === 0.6499999999999999 in IEEE-754. Without rounding the UI
-  // would show 0.65× once and 0.64× after a round-trip through the store.
+  // 0.75 - 0.1 and 0.35 - 0.1 don't actually pin the rounding: the former is
+  // exactly 0.65 in IEEE-754 (no noise to round away), and the latter's noise
+  // (0.35 - 0.1 === 0.24999999999999997) is masked by clampTempo's floor at
+  // 0.25 regardless of rounding. Kept for coverage of those inputs, but the
+  // two cases below are what actually fail if `Math.round` is removed:
+  // 0.55 - 0.1 === 0.45000000000000007 and 0.44 - 0.1 === 0.33999999999999997.
   it('rounds away float noise', () => {
     expect(stepTempo(0.75, -1)).toBe(0.65);
     expect(stepTempo(0.35, -1)).toBe(0.25);
+    expect(stepTempo(0.55, -1)).toBe(0.45);
+    expect(stepTempo(0.44, -1)).toBe(0.34);
   });
 
   it('clamps at both ends and is idempotent there', () => {
@@ -596,8 +602,10 @@ Expected: FAIL — `stepTempo is not a function` / нет экспорта.
 ```ts
 export const TEMPO_STEP = 0.1;
 
-// Rounding is not cosmetic: 0.75 - 0.1 is 0.6499999999999999, and that value
-// goes straight into the store, the engine and IndexedDB.
+// Rounding is not cosmetic: stepping is applied repeatedly (each tap adds
+// another +/- 0.1), and IEEE-754 noise accumulates across those additions —
+// e.g. 0.55 - 0.1 is 0.45000000000000007, not 0.45 — and that value flows
+// straight into the store, the engine and IndexedDB.
 export const stepTempo = (t: number, dir: 1 | -1): number =>
   clampTempo(Math.round((t + dir * TEMPO_STEP) * 100) / 100);
 ```

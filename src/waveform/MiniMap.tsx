@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '../store/usePlayerStore';
 import { overviewTimeToX } from './viewport';
 import { downsamplePeaks } from './computePeaks';
+import { activePalette } from '../ui/theme';
 import {
   idleGesture,
   onTouchStart,
@@ -91,6 +92,8 @@ export function MiniMap() {
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, cssW, cssH);
 
+      const p = activePalette();
+
       if (cssW <= 0 || cssH <= 0) {
         raf = requestAnimationFrame(draw);
         return;
@@ -105,7 +108,7 @@ export function MiniMap() {
           colsCount = n;
         }
         const mid = cssH / 2;
-        g.strokeStyle = '#3f6ea8';
+        g.strokeStyle = p.minimapPeaks;
         g.lineWidth = 1;
         g.beginPath();
         for (let c = 0; c < n; c++) {
@@ -122,13 +125,13 @@ export function MiniMap() {
       if (loopStart !== null && loopEnd !== null && loopEnd > loopStart) {
         const xa = overviewTimeToX(loopStart, duration, cssW);
         const xb = overviewTimeToX(loopEnd, duration, cssW);
-        g.fillStyle = 'rgba(90,160,255,0.22)';
+        g.fillStyle = p.loopFill;
         g.fillRect(xa, 0, xb - xa, cssH);
       }
 
       // playhead
       const px = overviewTimeToX(position, duration, cssW);
-      g.strokeStyle = '#ff5a5a';
+      g.strokeStyle = p.playhead;
       g.lineWidth = 2;
       g.beginPath();
       g.moveTo(px, 0);
@@ -137,8 +140,8 @@ export function MiniMap() {
 
       // markers LAST — same convention as WaveformCanvas: at minimap scale the
       // whole track compresses into a few hundred px, so a marker near the
-      // playhead would be swallowed by the red line if drawn under it.
-      g.strokeStyle = '#ffcf5a';
+      // playhead would be swallowed by the playhead line if drawn under it.
+      g.strokeStyle = p.marker;
       g.lineWidth = 1;
       for (const m of markers) {
         const x = overviewTimeToX(m.time, duration, cssW);

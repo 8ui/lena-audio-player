@@ -1,26 +1,21 @@
-import { usePlayerStore } from '../store/usePlayerStore';
 import { WaveformCanvas } from '../waveform/WaveformCanvas';
 import { MiniMap } from '../waveform/MiniMap';
-import { TransportBar } from '../ui/TransportBar';
-import { TempoControl } from '../ui/TempoControl';
-import { PitchControl } from '../ui/PitchControl';
-import { LoopControls } from '../ui/LoopControls';
-import { MarkersControl } from '../ui/MarkersControl';
+import { PlayerHeader } from '../ui/PlayerHeader';
+import { TimeBadge } from '../ui/TimeBadge';
+import { PlayerDock } from '../ui/PlayerDock';
 
 export function Player() {
-  const closeTrack = usePlayerStore((s) => s.closeTrack);
   return (
     <div className="player">
-      <header className="control-row screen-header">
-        <button aria-label="назад" onClick={closeTrack}>‹ Библиотека</button>
-      </header>
-      <WaveformCanvas />
+      <PlayerHeader />
+      {/* The badge is positioned against this wrapper, not the canvas: a canvas
+          cannot have children. */}
+      <div className="wave-wrap">
+        <WaveformCanvas />
+        <TimeBadge />
+      </div>
       <MiniMap />
-      <TempoControl />
-      <PitchControl />
-      <LoopControls />
-      <MarkersControl />
-      <TransportBar />
+      <PlayerDock />
     </div>
   );
 }
