@@ -57,6 +57,12 @@ export async function getState(trackId: string): Promise<TrackStateRecord | unde
   return (await db()).get('trackState', trackId);
 }
 
+// The library screen needs every track's state at once (to show where the user
+// stopped) — getState(trackId) is one id at a time.
+export async function listStates(): Promise<TrackStateRecord[]> {
+  return (await db()).getAll('trackState');
+}
+
 export async function saveState(s: TrackStateRecord): Promise<void> {
   await (await db()).put('trackState', s);
 }
