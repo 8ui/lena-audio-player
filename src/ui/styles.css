@@ -394,3 +394,45 @@ button:disabled { opacity: 0.4; }
   padding: 0 16px;
   border-bottom: 1px solid var(--border);
 }
+
+/* The sheet's backdrop must paint ABOVE the header and the FAB — the OPPOSITE
+   of the player's dock, where every row deliberately clears .backdrop. With a
+   sheet open, a tap on ＋ must close the sheet, not open the file picker; a tap
+   on the theme swatch must close it, not switch the palette. jsdom cannot
+   hit-test stacking contexts, so libraryLayers.test.ts pins this by reading the
+   z-index values straight out of this file. Order: header/FAB 30 < backdrop 40
+   < sheet 50. */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.5);
+}
+.sheet {
+  position: fixed;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  /* Standalone on iOS is full-bleed: without the inset the last button sits
+     under the home indicator. */
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+}
+.sheet-title {
+  overflow: hidden;
+  padding: 2px 2px 6px;
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sheet button { height: 56px; font-size: 16px; border-radius: var(--r-md); }
+.sheet button.danger { background: var(--danger); color: #fff; }
