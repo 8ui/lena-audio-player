@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '../store/usePlayerStore';
 import { timeToX, xToTime, clampPxPerSec } from './viewport';
+import { activePalette } from '../ui/theme';
 
 export function WaveformCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -29,6 +30,7 @@ export function WaveformCanvas() {
       g.clearRect(0, 0, cssW, cssH);
 
       const s = store.getState();
+      const p = activePalette();
       if (s.playing) s.tick();
       const { peaks, position, pxPerSec, loopStart, loopEnd, duration, markers } = store.getState();
 
@@ -36,7 +38,7 @@ export function WaveformCanvas() {
       if (loopStart !== null && loopEnd !== null) {
         const xa = timeToX(loopStart, position, pxPerSec, cssW);
         const xb = timeToX(loopEnd, position, pxPerSec, cssW);
-        g.fillStyle = 'rgba(90,160,255,0.18)';
+        g.fillStyle = p.loopFill;
         g.fillRect(xa, 0, xb - xa, cssH);
       }
 
@@ -52,7 +54,7 @@ export function WaveformCanvas() {
         const rightTime = xToTime(cssW, position, pxPerSec, cssW);
         const firstBucket = Math.max(0, Math.floor(leftTime / secondsPerBucket));
         const lastBucket = Math.min(peaks.length / 2 - 1, Math.ceil(rightTime / secondsPerBucket));
-        g.strokeStyle = '#5aa0ff';
+        g.strokeStyle = p.accent;
         g.beginPath();
         for (let b = firstBucket; b <= lastBucket; b++) {
           const t = b * secondsPerBucket;
@@ -66,7 +68,7 @@ export function WaveformCanvas() {
       }
 
       // fixed center playhead
-      g.strokeStyle = '#ff5a5a';
+      g.strokeStyle = p.playhead;
       g.lineWidth = 2;
       g.beginPath();
       g.moveTo(cssW / 2, 0);
@@ -74,17 +76,17 @@ export function WaveformCanvas() {
       g.stroke();
 
       // markers (drawn after the playhead so a marker at the current position
-      // shows its amber tick over the centered red playhead line)
+      // shows its tick over the centered playhead line)
       for (const m of markers) {
         const x = timeToX(m.time, position, pxPerSec, cssW);
         if (x < 0 || x > cssW) continue;
-        g.strokeStyle = '#ffcf5a';
+        g.strokeStyle = p.marker;
         g.lineWidth = 2;
         g.beginPath();
         g.moveTo(x, 0);
         g.lineTo(x, cssH);
         g.stroke();
-        g.fillStyle = '#ffcf5a';
+        g.fillStyle = p.marker;
         g.font = '12px system-ui, sans-serif';
         g.fillText(m.label, x + 3, 14);
       }
