@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
-import { usePlayerStore, __setEngineFactory } from './usePlayerStore';
+import { usePlayerStore, __setEngineFactory, __resetAudioContext } from './usePlayerStore';
 import * as db from '../storage/db';
 import type { AudioEngine } from '../engine/AudioEngine';
 import type { TrackRecord } from '../types';
@@ -29,6 +29,7 @@ describe('player store', () => {
       library: [], currentTrackId: null, peaks: null, duration: 0,
       playing: false, position: 0, tempo: 1, pitch: 0,
       loopStart: null, loopEnd: null, pxPerSec: 100, error: null, markers: [],
+      trackStates: {},
     });
   });
 
@@ -245,5 +246,75 @@ describe('player store', () => {
     });
     usePlayerStore.getState().seekPrevMarker();
     expect(usePlayerStore.getState().position).toBe(3);
+  });
+
+  it('init loads the saved state of every track, keyed by id', async () => {
+    const rec: TrackRecord = {
+      id: 'x', name: 'X', blob: new Blob(), peaks: new Float32Array(),
+      duration: 100, createdAt: 1,
+    };
+    await db.addTrack(rec);
+    await db.saveState({ ...db.defaultState('x'), lastPosition: 42, tempo: 0.8 });
+
+    await usePlayerStore.getState().init();
+
+    const { trackStates } = usePlayerStore.getState();
+    expect(trackStates['x'].lastPosition).toBe(42);
+    expect(trackStates['x'].tempo).toBe(0.8);
+  });
+
+  // The list shows "where did I stop". If closeTrack only flushed to IndexedDB,
+  // the card would still show the position from when the track was OPENED until
+  // the next full init() — i.e. until the app restarts.
+  it('closeTrack publishes the outgoing position into trackStates', () => {
+    usePlayerStore.setState({ currentTrackId: 'x', position: 55, tempo: 0.9, pitch: -2 });
+
+    usePlayerStore.getState().closeTrack();
+
+    const { trackStates, currentTrackId } = usePlayerStore.getState();
+    expect(currentTrackId).toBeNull();
+    expect(trackStates['x'].lastPosition).toBe(55);
+    expect(trackStates['x'].tempo).toBe(0.9);
+    expect(trackStates['x'].pitch).toBe(-2);
+  });
+
+  it('removeTrack drops the track state from the map', async () => {
+    const rec: TrackRecord = {
+      id: 'x', name: 'X', blob: new Blob(), peaks: new Float32Array(),
+      duration: 100, createdAt: 1,
+    };
+    await db.addTrack(rec);
+    usePlayerStore.setState({ trackStates: { x: db.defaultState('x') } });
+
+    await usePlayerStore.getState().removeTrack('x');
+
+    expect(usePlayerStore.getState().trackStates['x']).toBeUndefined();
+  });
+
+  // A quota overflow (a big file on a full phone) rejects inside db.addTrack
+  // with nobody catching it: the import silently does nothing and the user is
+  // told nothing.
+  it('importFile surfaces a storage failure in the error banner', async () => {
+    (globalThis as { AudioContext?: unknown }).AudioContext = class {
+      decodeAudioData = vi.fn().mockResolvedValue({
+        duration: 1,
+        sampleRate: 44100,
+        getChannelData: () => new Float32Array(44100),
+      });
+    };
+    // The store caches its AudioContext in a module-level `sharedCtx`, and the
+    // decode-failure test above populates it with a REJECTING stub. Without this
+    // reset, whether this test sees a working decode depends on test order.
+    __resetAudioContext();
+
+    const addTrack = vi.spyOn(db, 'addTrack').mockRejectedValue(new Error('quota'));
+
+    await usePlayerStore.getState().importFile(new File([new ArrayBuffer(8)], 'a.mp3'));
+
+    expect(usePlayerStore.getState().error).toMatch(/место/i);
+    expect(usePlayerStore.getState().library).toEqual([]);
+
+    addTrack.mockRestore();
+    __resetAudioContext(); // don't leave the working stub cached for the next test
   });
 });
