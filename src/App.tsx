@@ -30,7 +30,7 @@ export default function App() {
             left: 0,
             right: 0,
             zIndex: 100,
-            background: '#c0392b',
+            background: 'var(--danger)',
             color: '#fff',
             // Standalone on iOS is full-bleed: without the inset this fixed
             // banner would sit under the status bar. env() is 0 elsewhere.

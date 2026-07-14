@@ -12,6 +12,7 @@ export interface Palette {
   muted: string;
   accent: string;
   onAccent: string;
+  danger: string;
   playhead: string;
   loopFill: string;
   marker: string;
@@ -31,6 +32,7 @@ export const THEMES: Record<ThemeName, Palette> = {
     muted: '#a09582',
     accent: '#ffb43f',
     onAccent: '#231a08',
+    danger: '#c0392b',
     playhead: '#ff5a5a',
     loopFill: 'rgba(255,180,63,0.14)',
     marker: '#8be0ff',
@@ -46,6 +48,7 @@ export const THEMES: Record<ThemeName, Palette> = {
     muted: '#8b93a7',
     accent: '#5aa0ff',
     onAccent: '#08111f',
+    danger: '#c0392b',
     playhead: '#ff5a5a',
     loopFill: 'rgba(90,160,255,0.18)',
     marker: '#ffcf5a',
@@ -70,6 +73,18 @@ export function loadThemeName(): ThemeName {
 
 export function applyTheme(name: ThemeName = loadThemeName()): void {
   document.documentElement.dataset.theme = name;
+}
+
+// loadThemeName reads and applyTheme applies — nothing could WRITE the choice
+// until now, which is why `studio` was reachable only from the console.
+export function setThemeName(name: ThemeName): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, name);
+  } catch {
+    // Safari private mode throws on write. The theme still applies for this
+    // session; it just won't survive a reload.
+  }
+  applyTheme(name);
 }
 
 // Called by both canvases once per drawn frame: a single dataset read, and it

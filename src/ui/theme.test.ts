@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { THEMES, loadThemeName, applyTheme, activePalette, DEFAULT_THEME, type ThemeName, type Palette } from './theme';
+import { THEMES, loadThemeName, applyTheme, activePalette, DEFAULT_THEME, setThemeName, type ThemeName, type Palette } from './theme';
 import css from './styles.css?raw';
 import indexHtml from '../../index.html?raw';
 
@@ -59,5 +59,18 @@ describe('theme', () => {
   it('activePalette defaults to warm when no theme is applied', () => {
     delete document.documentElement.dataset.theme;
     expect(activePalette()).toBe(THEMES.warm);
+  });
+
+  it('setThemeName persists the choice and applies it', () => {
+    setThemeName('studio');
+    expect(localStorage.getItem('razbor.theme')).toBe('studio');
+    expect(document.documentElement.dataset.theme).toBe('studio');
+    expect(loadThemeName()).toBe('studio');
+
+    setThemeName('warm');
+    expect(localStorage.getItem('razbor.theme')).toBe('warm');
+    expect(document.documentElement.dataset.theme).toBe('warm');
+
+    localStorage.removeItem('razbor.theme');
   });
 });

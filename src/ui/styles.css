@@ -16,6 +16,7 @@
   --muted: #a09582;
   --accent: #ffb43f;
   --on-accent: #231a08;
+  --danger: #c0392b;
   --playhead: #ff5a5a;
   --loop-fill: rgba(255,180,63,0.14);
   --marker: #8be0ff;
@@ -32,6 +33,7 @@
   --muted: #8b93a7;
   --accent: #5aa0ff;
   --on-accent: #08111f;
+  --danger: #c0392b;
   --playhead: #ff5a5a;
   --loop-fill: rgba(90,160,255,0.18);
   --marker: #ffcf5a;
