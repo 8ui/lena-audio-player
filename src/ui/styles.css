@@ -307,6 +307,84 @@ button:disabled { opacity: 0.4; }
 .track-wave rect { fill: var(--muted); opacity: 0.45; }
 .track-wave rect.played { fill: var(--accent); opacity: 1; }
 
+.track-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+/* The stretched open target. Three things are load-bearing:
+   - `inset: 0` makes the WHOLE card tappable (the MVP row only reacted to a
+     tap on the name itself);
+   - the global `button` rule paints var(--elevated) and forces a 48px min box,
+     both of which must be cleared here;
+   - it sits BELOW .body in z-order, so its :active background shows as press
+     feedback *under* the text instead of covering it. */
+.track-card .open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  border-radius: var(--r-lg);
+}
+.track-card .open:active { background: var(--elevated); filter: none; }
+
+/* Positioned so it paints above .open; pointer-events: none so every tap on the
+   text falls through to it. */
+.track-card .body {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-width: 0;
+  pointer-events: none;
+}
+
+/* Above .body, and the only thing inside the card that is NOT the open target. */
+.track-card .menu {
+  position: relative;
+  z-index: 3;
+  background: transparent;
+  color: var(--muted);
+  font-size: 22px;
+}
+
+.track-card .row { display: flex; align-items: baseline; gap: 8px; }
+.track-card .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 17px;
+}
+.track-card .dur {
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+/* min-height keeps every card the same height whether or not it has badges —
+   a list that reflows as you use it is a list you can't tap blind. */
+.track-card .meta { gap: 6px; margin-top: 6px; min-height: 20px; }
+.track-card .resume {
+  color: var(--accent);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.track-card .badge {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .screen-header { padding: calc(12px + env(safe-area-inset-top)) 16px 12px; }
 .control-row { display: flex; gap: 12px; align-items: center; }
 .library-item {
