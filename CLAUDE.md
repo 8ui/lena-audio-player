@@ -89,7 +89,8 @@ The **pure modules** are the TDD surface and have real unit tests:
 `engine/params.ts` (clamps, `stepTempo`'s rounding), `engine/position.ts`
 (`currentSourceTime`), `waveform/viewport.ts`, `waveform/computePeaks.ts`,
 `waveform/markers.ts`, `waveform/minimapGesture.ts`, `uuid.ts`,
-`storage/db.ts` (via `fake-indexeddb`), and the store (`usePlayerStore.ts`,
+`ui/time.ts` (`fmtTime`/`fmtTimeTenths`), `storage/db.ts` (via
+`fake-indexeddb`), and the store (`usePlayerStore.ts`,
 with a fake `AudioEngine` injected via `__setEngineFactory`). `theme.test.ts`
 similarly pins `theme.ts` against `styles.css` (see Theming). Components with
 real logic (`ControlTabs`, `TempoStepper`, the panels, the dock, `App`'s

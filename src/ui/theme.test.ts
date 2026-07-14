@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { THEMES, loadThemeName, applyTheme, activePalette, type ThemeName, type Palette } from './theme';
+import { THEMES, loadThemeName, applyTheme, activePalette, DEFAULT_THEME, type ThemeName, type Palette } from './theme';
 import css from './styles.css?raw';
+import indexHtml from '../../index.html?raw';
 
 const kebab = (k: string): string => k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
 
@@ -22,6 +23,16 @@ describe('theme', () => {
     for (const key of Object.keys(palette) as (keyof Palette)[]) {
       expect(vars[kebab(key)], `--${kebab(key)}`).toBe(palette[key]);
     }
+  });
+
+  // index.html hardcodes a literal data-theme (see the comment there: it's the
+  // static default that colours the very first paint, before applyTheme() runs
+  // from main.tsx). Nothing but this assertion stops that literal from drifting
+  // away from DEFAULT_THEME if the latter ever changes.
+  it("index.html's <html data-theme> matches DEFAULT_THEME", () => {
+    const m = /<html\b[^>]*\bdata-theme=["']([^"']+)["']/.exec(indexHtml);
+    expect(m, 'index.html <html> tag has no data-theme attribute').not.toBeNull();
+    expect(m![1]).toBe(DEFAULT_THEME);
   });
 
   it('falls back to warm on an unknown stored value', () => {
