@@ -26,7 +26,7 @@ npx tsc --noEmit  # type-check only, no build output (separate step from build)
 npm run icons     # regenerate the PWA icons (scripts/gen-icons.mjs, zero deps)
 ```
 
-Currently 17 test files / 112 tests, all passing. **Note:** Type-checking is not part of the build pipeline — run `npx tsc --noEmit` separately if you want to verify types before bundling (esbuild strips types, so `vite build` alone does not catch type errors).
+Currently 18 test files / 122 tests, all passing. **Note:** Type-checking is not part of the build pipeline — run `npx tsc --noEmit` separately if you want to verify types before bundling (esbuild strips types, so `vite build` alone does not catch type errors).
 
 ## Architecture
 
@@ -186,6 +186,16 @@ asserts every palette key matches its CSS variable, for both themes. Add or
 change a colour in one file without the other and this is the only thing
 that catches it.
 
+`index.html`'s `<html>` tag also carries a **static** `data-theme="warm"` —
+not a leftover, a deliberate default. Every colour variable lives under
+`:root[data-theme=…]`, and the stylesheet is render-blocking while
+`applyTheme()` only runs once `main.tsx`'s deferred module script executes.
+Without the static attribute, first paint has every `--var` unresolved
+(transparent, not the dark background) and the page flashes white before
+repainting dark. `applyTheme()` still overwrites the attribute from
+`localStorage` right after, e.g. to `'studio'` — the static value only needs
+to match `DEFAULT_THEME`.
+
 ## Gotchas / non-obvious
 
 1. **Zustand v5 object-selector infinite loop.** A store selector that
@@ -250,19 +260,25 @@ that catches it.
    grep -c soundtouch-processor dist/sw.js              # >=1 == precached == offline works
    grep -o 'apple-touch-icon[^>]*' dist/index.html      # href must be rebased
    ```
-9. **`ControlTabs`' popover must stay an overlay, and `.chips` must stay
-   positioned above `.backdrop`.** The tab panel (`.popover`,
-   `position: absolute`, floated over the dock) must never become a row in
-   the flex column — putting it back inline would resize/jump the waveform
-   every time a tab opens. Relatedly, `.chips { position: relative;
-   z-index: 30; }` is load-bearing, not decorative: `.backdrop`
-   (`position: fixed; z-index: 10`, covering the full viewport so a tap
-   outside the popover closes it) paints above any non-positioned in-flow
-   sibling regardless of source order — so without that z-index, the
-   backdrop would silently sit on top of the chip row and swallow every tap
-   meant to switch tabs while a panel is open. jsdom cannot hit-test
-   stacking contexts, so `ControlTabs.test.tsx` asserts the CSS z-order by
-   reading `styles.css` directly instead of simulating the click-through.
+9. **`ControlTabs`' popover must stay an overlay, and every row of `.dock`
+   (`.tempo`, `.transport`, `.chips`) must stay positioned above
+   `.backdrop`.** The tab panel (`.popover`, `position: absolute`, floated
+   over the dock) must never become a row in the flex column — putting it
+   back inline would resize/jump the waveform every time a tab opens.
+   Relatedly, `.tempo`, `.transport` and `.chips` all carry
+   `position: relative; z-index: 30;` — load-bearing, not decorative:
+   `.backdrop` (`position: fixed; z-index: 10`, covering the full viewport
+   so a tap outside the popover closes it) paints above any non-positioned
+   in-flow sibling regardless of source order — so without that z-index on
+   a row, the backdrop silently sits on top of it and swallows the first tap
+   meant for it while a panel is open (the tap just closes the panel; the
+   user has to tap again). This bit `.chips` first (tab-switching itself was
+   dead) and then `.tempo`/`.transport` (▶ and the tempo −/+ needed a double
+   tap) — the rule is *every* dock row, not just the tab chips; a new row
+   added to `.dock` needs the same opt-out. jsdom cannot hit-test stacking
+   contexts, so `ControlTabs.test.tsx` asserts the CSS z-order for all three
+   rows by reading `styles.css` directly instead of simulating the
+   click-through.
 
 ## Deploy
 

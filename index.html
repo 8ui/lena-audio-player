@@ -1,5 +1,13 @@
 <!doctype html>
-<html lang="ru">
+<!-- data-theme="warm" is a static default, not a stray leftover: every colour
+     variable lives under :root[data-theme='warm']/[data-theme='studio'] (see
+     src/ui/styles.css), and this stylesheet is render-blocking while
+     applyTheme() (src/ui/theme.ts, called at the top of src/main.tsx) only
+     runs once the deferred module script executes. Without an attribute here,
+     the first paint has every --var unresolved (transparent, not the dark
+     background) — a white flash that then repaints dark. applyTheme() still
+     overwrites this from localStorage right after, e.g. to 'studio'. -->
+<html lang="ru" data-theme="warm">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />

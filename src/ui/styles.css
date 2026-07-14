@@ -95,7 +95,9 @@ button:disabled { opacity: 0.4; }
 }
 .player-header .back {
   min-width: auto;
-  min-height: 40px;
+  /* The only way out of the player screen, tapped at arm's length — must
+     clear the 44px touch-target floor even though it's a small text button. */
+  min-height: 44px;
   padding: 0 10px;
   font-size: 14px;
   background: transparent;
@@ -164,7 +166,20 @@ button:disabled { opacity: 0.4; }
   padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
 }
 
-.tempo { display: flex; gap: 8px; }
+/* Every row in the dock (.tempo, .transport, .chips below) needs its own
+   stacking context above .backdrop (z-index:10) and .popover (z-index:20):
+   each is otherwise a plain in-flow element with the default z-index:auto,
+   and a positioned sibling with a z-index paints above any non-positioned
+   in-flow element regardless of source order in this file — so with a panel
+   open the full-viewport .backdrop would silently cover that row and
+   swallow the first tap on it (nothing happens except the panel closing;
+   the user has to tap again). 30 is used for all three rows purely for
+   consistency — anything above .backdrop's 10 is enough, none of them need
+   to clear .popover's 20 since they never overlap it. Caught first on
+   .chips (it made tab-switching itself dead while a panel was open); .tempo
+   and .transport carried the identical bug — this rule is "every dock row",
+   not just the tab chips. See also the comment on .backdrop. */
+.tempo { position: relative; z-index: 30; display: flex; gap: 8px; }
 .tempo button {
   flex: 0 0 auto;
   width: 64px;
@@ -197,7 +212,8 @@ button:disabled { opacity: 0.4; }
   color: var(--muted);
 }
 
-.transport { display: flex; justify-content: center; }
+/* Same stacking-context fix as .tempo above, same reason — see that comment. */
+.transport { position: relative; z-index: 30; display: flex; justify-content: center; }
 .transport .play {
   width: 64px;
   height: 64px;
@@ -207,16 +223,17 @@ button:disabled { opacity: 0.4; }
   font-size: 24px;
 }
 
-/* Own stacking context above the backdrop (z-index:10) and popover (z-index:20):
-   .chips is otherwise a plain in-flow element, and a positioned sibling with a
-   z-index paints above any non-positioned in-flow element regardless of source
-   order — so with a panel open the full-viewport .backdrop would silently cover
-   the chip row and swallow every tap meant to switch tabs. */
+/* Same stacking-context fix as .tempo above — see that comment. This is the
+   row where the bug was first caught: with a panel open, .backdrop would
+   silently cover the chip row and swallow every tap meant to switch tabs. */
 .chips { position: relative; z-index: 30; display: flex; gap: 8px; }
 .chips button {
   flex: 1;
   min-width: 0;
-  height: 44px;
+  /* No explicit height: the global `button { min-height: var(--touch) }`
+     (48px) always wins over a smaller height here, so a `height: 44px` line
+     would be dead and misleading. 48px is deliberate — these are primary
+     controls on a phone held at arm's length. */
   font-size: 13px;
   color: var(--muted);
   border: 1px solid var(--border);
@@ -261,8 +278,15 @@ button:disabled { opacity: 0.4; }
   font-variant-numeric: tabular-nums;
 }
 
-/* Catches a tap outside the popover. Deliberately covers the canvases: with a
-   panel open, a tap should close it, not scrub the waveform. */
+/* Catches a tap outside the popover and closes it. `position: fixed; inset: 0`
+   deliberately covers the canvases too — with a panel open, a tap should
+   close it, not scrub the waveform — but that same fixed positioning also
+   hit-tests above every OTHER non-positioned in-flow element on the screen,
+   which includes every row of the dock (.tempo, .transport, .chips), not
+   just the canvases. Each of those rows opts back out via its own
+   `position: relative; z-index: 30` (see the comment on .tempo) — without
+   that, a panel being open would silently swallow the first tap on that row
+   too. If a new row is added to .dock, it needs the same opt-out. */
 .backdrop {
   position: fixed;
   inset: 0;

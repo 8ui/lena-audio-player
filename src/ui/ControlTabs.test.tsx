@@ -155,20 +155,40 @@ describe('ControlTabs', () => {
   // at the node, bypassing hit-testing): .backdrop is `position: fixed;
   // z-index: 10` and .popover is `position: absolute; z-index: 20`, both
   // painting above any non-positioned in-flow sibling in the same stacking
-  // context. If .chips were left as a plain static element, the full-viewport
-  // backdrop would paint over the chip row while a panel is open, and a tap
-  // meant to switch tabs would instead just close the panel.
-  it('keeps .chips positioned above the .backdrop so chips stay tappable while a panel is open', () => {
-    const chips = cssBlock('.chips');
-    const backdrop = cssBlock('.backdrop');
+  // context. If a dock row (.chips, .tempo, .transport) were left as a plain
+  // static element, the full-viewport backdrop would paint over that row
+  // while a panel is open, and the first tap on it would silently do nothing
+  // but close the panel — .chips shipped that bug first (tab-switching itself
+  // was dead), then .tempo/.transport shipped the identical bug (▶ and the
+  // tempo −/+ needed a double tap). Every dock row must clear it.
+  it.each(['.chips', '.tempo', '.transport'])(
+    'keeps %s positioned above the .backdrop so it stays tappable while a panel is open',
+    (selector) => {
+      const row = cssBlock(selector);
+      const backdrop = cssBlock('.backdrop');
 
-    const chipsPosition = cssProp(chips, 'position');
-    expect(chipsPosition, '.chips must be positioned for z-index to have any effect').toBeTruthy();
-    expect(chipsPosition).not.toBe('static');
+      const rowPosition = cssProp(row, 'position');
+      expect(rowPosition, `${selector} must be positioned for z-index to have any effect`).toBeTruthy();
+      expect(rowPosition).not.toBe('static');
 
-    const chipsZ = Number(cssProp(chips, 'z-index'));
-    const backdropZ = Number(cssProp(backdrop, 'z-index'));
-    expect(Number.isNaN(chipsZ), '.chips must declare a z-index').toBe(false);
-    expect(chipsZ).toBeGreaterThan(backdropZ);
+      const rowZ = Number(cssProp(row, 'z-index'));
+      const backdropZ = Number(cssProp(backdrop, 'z-index'));
+      expect(Number.isNaN(rowZ), `${selector} must declare a z-index`).toBe(false);
+      expect(rowZ).toBeGreaterThan(backdropZ);
+    }
+  );
+
+  // Screen readers need the tab <-> tabpanel relationship spelled out
+  // explicitly; role alone doesn't associate them.
+  it('associates each tab with the tabpanel via aria-controls/aria-labelledby', () => {
+    render(<ControlTabs />);
+    const tab = screen.getByRole('tab', { name: /тон/i });
+    fireEvent.click(tab);
+    const panel = screen.getByRole('tabpanel');
+
+    expect(tab.id).toBeTruthy();
+    expect(panel.id).toBeTruthy();
+    expect(tab.getAttribute('aria-controls')).toBe(panel.id);
+    expect(panel.getAttribute('aria-labelledby')).toBe(tab.id);
   });
 });

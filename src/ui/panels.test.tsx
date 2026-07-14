@@ -53,13 +53,15 @@ describe('LoopPanel', () => {
 
     fireEvent.click(screen.getByText('A'));
     expect(usePlayerStore.getState().loopStart).toBe(42);
-    expect(screen.getByText('A 0:42')).toBeInTheDocument();
+    // Tenths, not whole seconds: fmtTime alone can't tell a 0.5s loop from a
+    // 0.9s one apart, and this app loops bars of music.
+    expect(screen.getByText('A 0:42.0')).toBeInTheDocument();
     // Only A is set so far — reset must still be disabled (guards `&&` vs `||`).
     expect(screen.getByText('Сброс')).toBeDisabled();
 
     fireEvent.click(screen.getByText('B'));
     expect(usePlayerStore.getState().loopEnd).toBe(42);
-    expect(screen.getByText('B 0:42')).toBeInTheDocument();
+    expect(screen.getByText('B 0:42.0')).toBeInTheDocument();
   });
 
   it('clears the loop', () => {

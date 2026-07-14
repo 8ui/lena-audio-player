@@ -23,6 +23,12 @@ export function ControlTabs() {
 
   const toggle = (t: Tab) => setOpen((cur) => (cur === t ? null : t));
 
+  // Stable ids for the tab/tabpanel ARIA relationship — one tab id per Tab
+  // value, and a single panel id since only one panel is ever mounted at a
+  // time (the popover swaps its contents rather than rendering three).
+  const tabId = (t: Tab) => `control-tab-${t}`;
+  const panelId = 'control-tabpanel';
+
   return (
     <>
       {open !== null && (
@@ -32,7 +38,7 @@ export function ControlTabs() {
           <div className="backdrop" onClick={() => setOpen(null)} />
           {/* An overlay anchored to the dock, NOT a row in it — opening a panel
               must not resize the waveform. */}
-          <div className="popover" role="tabpanel">
+          <div className="popover" role="tabpanel" id={panelId} aria-labelledby={tabId(open)}>
             {open === 'pitch' && <PitchPanel />}
             {open === 'loop' && <LoopPanel />}
             {open === 'markers' && <MarkersPanel />}
@@ -41,24 +47,30 @@ export function ControlTabs() {
       )}
       <div className="chips" role="tablist">
         <button
+          id={tabId('pitch')}
           role="tab"
           aria-selected={open === 'pitch'}
+          aria-controls={panelId}
           className={pitch !== 0 ? 'on' : undefined}
           onClick={() => toggle('pitch')}
         >
           ♪ Тон {pitch > 0 ? `+${pitch}` : pitch}
         </button>
         <button
+          id={tabId('loop')}
           role="tab"
           aria-selected={open === 'loop'}
+          aria-controls={panelId}
           className={loopSet ? 'on' : undefined}
           onClick={() => toggle('loop')}
         >
           A–B {loopSet ? '✓' : ''}
         </button>
         <button
+          id={tabId('markers')}
           role="tab"
           aria-selected={open === 'markers'}
+          aria-controls={panelId}
           aria-label={`Маркеры ⚑ ${markerCount}`}
           className={markerCount > 0 ? 'on' : undefined}
           onClick={() => toggle('markers')}
