@@ -26,7 +26,7 @@ npx tsc --noEmit  # type-check only, no build output (separate step from build)
 npm run icons     # regenerate the PWA icons (scripts/gen-icons.mjs, zero deps)
 ```
 
-Currently 18 test files / 122 tests, all passing. **Note:** Type-checking is not part of the build pipeline — run `npx tsc --noEmit` separately if you want to verify types before bundling (esbuild strips types, so `vite build` alone does not catch type errors).
+Currently 27 test files / 186 tests, all passing. **Note:** Type-checking is not part of the build pipeline — run `npx tsc --noEmit` separately if you want to verify types before bundling (esbuild strips types, so `vite build` alone does not catch type errors).
 
 ## Architecture
 
@@ -35,6 +35,27 @@ Five layers, each one only talks to the layer directly below it:
 1. **UI** (`src/screens/*`, `src/ui/*`, `src/App.tsx`) — React components.
    `App.tsx` switches between `Library` (import/pick a track) and `Player`
    based on `currentTrackId`, and renders the dismissible error banner.
+   `Library` (`src/screens/Library.tsx`) composes `LibraryHeader` (an `<h1>`
+   plus `ThemeToggle`), a `.track-list` of `TrackCard`s sorted newest-first
+   (`sortTracks` in `ui/libraryModel.ts` — `db.listTracks()` is a bare
+   `getAll`, i.e. no order at all), a fixed `ImportButton` FAB
+   (`.import-fab`), and an `EmptyLibrary` state when the list is empty. Each
+   `TrackCard` is a stretched-hit-area `<button className="open">` behind a
+   `.body` (name, duration, a `TrackWave` preview, and a `.meta` row showing
+   the resume time via `fmtTime(lastPosition)` plus non-default-setting
+   badges from `libraryModel.ts` — `tempoBadge`/`pitchBadge`/`loopBadge`,
+   each `null` when the value is the default so it doesn't render) and a
+   trailing `⋯` button that opens `TrackSheet`, an overlay with
+   Удалить/Отмена that replaces the native `confirm()`. Which track's sheet
+   is open is local React state (`sheetId` in `Library.tsx`), never the
+   store — same rule `ControlTabs` follows for its open tab. `TrackWave` is
+   deliberately **SVG, not a canvas**: `libraryModel.ts`'s `progressRatio`
+   plus `waveform/computePeaks.ts`'s `barHeights` (which downsamples peaks to
+   a fixed bar count) supply the pure numbers, and every bar's colour comes
+   from a CSS class/variable, so a theme switch recolours every card with no
+   redraw. `ThemeToggle` (`src/ui/ThemeToggle.tsx`) is the first and only UI
+   entry point to `theme.ts`'s `setThemeName`/`loadThemeName` — it is not
+   store state, since theme has to apply before React mounts (see Theming).
    `Player` (`src/screens/Player.tsx`) composes `PlayerHeader`, a
    `.wave-wrap` holding `WaveformCanvas` plus `TimeBadge` (an overlay plaque;
    `pointer-events: none` so a pan gesture starting on it still reaches the
@@ -172,12 +193,17 @@ paused forever.
 objects, `warm` (the default) and `studio`. `src/main.tsx` calls
 `applyTheme()` *before* `createRoot(...).render(...)`; it reads the choice
 from `localStorage` (key `razbor.theme`) and stamps it as `<html
-data-theme="warm"|"studio">`. There is deliberately no UI switcher yet — the
-only way to reach `studio` today is
-`localStorage.setItem('razbor.theme', 'studio')` + reload. `src/ui/styles.css`
+data-theme="warm"|"studio">`. `studio` is now reachable from the UI:
+`ThemeToggle` (`src/ui/ThemeToggle.tsx`, in `LibraryHeader`) calls
+`setThemeName`, which re-stamps `<html data-theme>` and re-resolves every CSS
+variable on the page. `src/ui/styles.css`
 mirrors every `Palette` key as a CSS variable under `:root[data-theme=…]`,
 and the canvases read colour via `activePalette()` (a single
 `dataset.theme` read, called once per drawn frame) instead of hardcoding hex.
+The library's `TrackWave` (`src/ui/TrackWave.tsx`) takes a different path to
+the same rule: it's SVG, coloured entirely by CSS classes/variables, so it
+re-themes for free when `data-theme` changes — no palette read, no redraw,
+unlike the canvases.
 
 **Nothing but `theme.test.ts` stops `theme.ts` and `styles.css` from drifting
 apart.** It imports the stylesheet via a Vite `?raw` import (`import css from
@@ -280,6 +306,19 @@ to match `DEFAULT_THEME`.
    contexts, so `ControlTabs.test.tsx` asserts the CSS z-order for all three
    rows by reading `styles.css` directly instead of simulating the
    click-through.
+10. **The library's layer order is the inverse of the player's.** In the
+    dock, every row (`.tempo`, `.transport`, `.chips`) deliberately sits
+    *above* `.backdrop` (gotcha 9). On the library, it's flipped:
+    `.sheet-backdrop` (`z-index: 40`) must sit *above* `.library-header` and
+    `.import-fab` (both `position: relative`/`fixed; z-index: 30`) — with a
+    sheet open, a tap on the FAB must close the sheet, not open the file
+    picker. Two opposite rules in the same stylesheet: check which screen
+    you're on before copying a z-index from one to the other. Both are
+    pinned by tests that read `styles.css` directly instead of simulating
+    the click-through, because jsdom does not hit-test stacking contexts —
+    `ControlTabs.test.tsx` for the player, `libraryLayers.test.ts` for the
+    library (which also pins that the MVP-era `.screen-header`,
+    `.control-row`, `.library-item` rules are gone).
 
 ## Deploy
 
