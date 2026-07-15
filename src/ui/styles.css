@@ -16,6 +16,7 @@
   --muted: #a09582;
   --accent: #ffb43f;
   --on-accent: #231a08;
+  --danger: #c0392b;
   --playhead: #ff5a5a;
   --loop-fill: rgba(255,180,63,0.14);
   --marker: #8be0ff;
@@ -32,6 +33,7 @@
   --muted: #8b93a7;
   --accent: #5aa0ff;
   --on-accent: #08111f;
+  --danger: #c0392b;
   --playhead: #ff5a5a;
   --loop-fill: rgba(90,160,255,0.18);
   --marker: #ffcf5a;
@@ -293,13 +295,225 @@ button:disabled { opacity: 0.4; }
   z-index: 10;
 }
 
-/* ── Library (out of scope for this redesign — keep it working) ── */
-.screen-header { padding: calc(12px + env(safe-area-inset-top)) 16px 12px; }
-.control-row { display: flex; gap: 12px; align-items: center; }
-.library-item {
+/* ── Library ─────────────────────────────────────────────────────────────
+   dvh, not vh — iOS's collapsing URL bar makes vh too tall (same as .player). */
+.library {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.track-list {
+  display: flex;
+  flex: 1;
+  /* Without min-height: 0 a flex item refuses to shrink below its content and
+     the list scrolls the whole page instead of itself. */
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 4px 12px;
+  /* The FAB floats over the list: without this the last card hides under it. */
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+/* The card's waveform is SVG, not a canvas: these two rules are the entire
+   theme story for it. Switching the palette re-resolves the variables and
+   every card recolours without a line of JS. */
+.track-wave {
+  display: block;
+  width: 100%;
+  height: 28px;
+}
+.track-wave rect { fill: var(--muted); opacity: 0.45; }
+.track-wave rect.played { fill: var(--accent); opacity: 1; }
+
+.track-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+/* The stretched open target. Three things are load-bearing:
+   - `inset: 0` makes the WHOLE card tappable (the MVP row only reacted to a
+     tap on the name itself);
+   - the global `button` rule paints var(--elevated) and forces a 48px min box,
+     both of which must be cleared here;
+   - it sits BELOW .body in z-order, so its :active background shows as press
+     feedback *under* the text instead of covering it. */
+.track-card .open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  border-radius: var(--r-lg);
+}
+.track-card .open:active { background: var(--elevated); filter: none; }
+
+/* Positioned so it paints above .open; pointer-events: none so every tap on the
+   text falls through to it. */
+.track-card .body {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-width: 0;
+  pointer-events: none;
+}
+
+/* Above .body, and the only thing inside the card that is NOT the open target. */
+.track-card .menu {
+  position: relative;
+  z-index: 3;
+  background: transparent;
+  color: var(--muted);
+  font-size: 22px;
+}
+
+.track-card .row { display: flex; align-items: baseline; gap: 8px; }
+.track-card .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 17px;
+}
+.track-card .dur {
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+/* min-height keeps every card the same height whether or not it has badges —
+   a list that reflows as you use it is a list you can't tap blind. */
+.track-card .meta { gap: 6px; margin-top: 6px; min-height: 20px; }
+.track-card .resume {
+  color: var(--accent);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.track-card .badge {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* z-index is load-bearing, not decoration: .sheet-backdrop (40) must paint OVER
+   the header, or a tap on the theme swatch with a sheet open would switch the
+   palette instead of closing the sheet. position: relative is what makes the
+   z-index apply at all. Pinned by libraryLayers.test.ts. */
+.library-header {
+  position: relative;
+  z-index: 30;
   display: flex;
   align-items: center;
-  min-height: 64px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border);
+  gap: 12px;
+  /* Standalone on iOS runs full-bleed (viewport-fit=cover): without the inset
+     the title lands under the status bar / notch. env() is 0 elsewhere. */
+  padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
 }
+.library-header h1 {
+  flex: 1;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.5;
+}
+.import-cta {
+  padding: 0 22px;
+  height: 56px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--elevated);
+  color: var(--text);
+  font-size: 16px;
+}
+
+/* z-index 30: BELOW .sheet-backdrop (40). With a sheet open a tap here must
+   close the sheet, not open the file picker. See libraryLayers.test.ts. */
+.import-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 30;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 28px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.theme-toggle { background: transparent; }
+.theme-toggle .swatch {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* The sheet's backdrop must paint ABOVE the header and the FAB — the OPPOSITE
+   of the player's dock, where every row deliberately clears .backdrop. With a
+   sheet open, a tap on ＋ must close the sheet, not open the file picker; a tap
+   on the theme swatch must close it, not switch the palette. jsdom cannot
+   hit-test stacking contexts, so libraryLayers.test.ts pins this by reading the
+   z-index values straight out of this file. Order: header/FAB 30 < backdrop 40
+   < sheet 50. */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.5);
+}
+.sheet {
+  position: fixed;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  /* Standalone on iOS is full-bleed: without the inset the last button sits
+     under the home indicator. */
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+}
+.sheet-title {
+  overflow: hidden;
+  padding: 2px 2px 6px;
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sheet button { height: 56px; font-size: 16px; border-radius: var(--r-md); }
+.sheet button.danger { background: var(--danger); color: #fff; }

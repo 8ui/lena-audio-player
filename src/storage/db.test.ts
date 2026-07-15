@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
-import { addTrack, listTracks, getTrack, deleteTrack, getState, saveState, defaultState } from './db';
+import { addTrack, listTracks, getTrack, deleteTrack, getState, saveState, defaultState, listStates } from './db';
 import type { TrackRecord } from '../types';
 
 function makeTrack(id: string): TrackRecord {
@@ -39,5 +39,17 @@ describe('storage', () => {
     await deleteTrack('d');
     expect(await getTrack('d')).toBeUndefined();
     expect(await getState('d')).toBeUndefined();
+  });
+
+  it('listStates returns every persisted track state at once', async () => {
+    await saveState({ ...defaultState('s1'), lastPosition: 12 });
+    await saveState({ ...defaultState('s2'), lastPosition: 34 });
+
+    const byId = Object.fromEntries(
+      (await listStates()).map((s) => [s.trackId, s.lastPosition]),
+    );
+
+    expect(byId['s1']).toBe(12);
+    expect(byId['s2']).toBe(34);
   });
 });

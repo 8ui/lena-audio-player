@@ -5,7 +5,7 @@ import { clampTempo, clampSemitones } from '../engine/params';
 import { computePeaks } from '../waveform/computePeaks';
 import { clampPxPerSec, PX_PER_SEC_DEFAULT } from '../waveform/viewport';
 import * as db from '../storage/db';
-import type { TrackRecord, Marker } from '../types';
+import type { TrackRecord, TrackStateRecord, Marker } from '../types';
 import {
   insertMarker,
   removeNearestMarker,
@@ -28,6 +28,14 @@ export function __setEngineFactory(f: () => AudioEngine) {
   engine = null;
 }
 
+// Test seam, like __setEngineFactory above. `sharedCtx` is created once and
+// cached forever; tests stub globalThis.AudioContext with contexts that behave
+// differently (one rejects the decode, one resolves it), so whichever test runs
+// first would otherwise own the cache for the whole file.
+export function __resetAudioContext(): void {
+  sharedCtx = null;
+}
+
 function ensureEngine(): AudioEngine {
   if (!engine) {
     engine = engineFactory();
@@ -38,6 +46,10 @@ function ensureEngine(): AudioEngine {
 
 interface PlayerState {
   library: TrackRecord[];
+  // Every track's persisted state, keyed by track id — this is what lets the
+  // library show where the user stopped. Loaded once in init(), then kept in
+  // step by importFile/removeTrack/closeTrack.
+  trackStates: Record<string, TrackStateRecord>;
   currentTrackId: string | null;
   peaks: Float32Array | null;
   duration: number;
@@ -111,6 +123,7 @@ function flushPersist(): Promise<void> | undefined {
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   library: [],
+  trackStates: {},
   currentTrackId: null,
   peaks: null,
   duration: 0,
@@ -125,7 +138,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   markers: [],
 
   async init() {
-    set({ library: await db.listTracks() });
+    const [library, states] = await Promise.all([db.listTracks(), db.listStates()]);
+    const trackStates: Record<string, TrackStateRecord> = {};
+    for (const s of states) trackStates[s.trackId] = s;
+    set({ library, trackStates });
   },
 
   async importFile(file) {
@@ -147,7 +163,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       duration: audioBuffer.duration,
       createdAt: Date.now(),
     };
-    await db.addTrack(rec);
+    try {
+      await db.addTrack(rec);
+    } catch {
+      // Quota overflow on a full phone rejects here. Silence would mean the
+      // track just never appears in the list, with no explanation.
+      set({ error: 'Не удалось сохранить трек — возможно, на устройстве кончилось место.' });
+      return;
+    }
     set({ library: await db.listTracks() });
   },
 
@@ -200,15 +223,44 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       engine?.pause();
       set({ currentTrackId: null, playing: false, peaks: null, position: 0, markers: [] });
     }
-    set({ library: await db.listTracks() });
+    const { [id]: _removed, ...trackStates } = get().trackStates;
+    set({ library: await db.listTracks(), trackStates });
   },
 
   closeTrack() {
+    // Capture the id BEFORE anything clears it.
+    const id = get().currentTrackId;
     // Flush FIRST, while currentTrackId/position still hold the outgoing
     // track's values — this is what saves the leave-position.
     flushPersist();
     engine?.pause();
-    set({ currentTrackId: null, playing: false, peaks: null, position: 0, markers: [] });
+    const s = get();
+    // Publish the same values into trackStates locally. flushPersist() only
+    // writes to IndexedDB; without this the card would keep showing the
+    // position the track had when it was OPENED, until the next init().
+    const trackStates = id
+      ? {
+          ...s.trackStates,
+          [id]: {
+            trackId: id,
+            tempo: s.tempo,
+            pitch: s.pitch,
+            loopStart: s.loopStart,
+            loopEnd: s.loopEnd,
+            pxPerSec: s.pxPerSec,
+            markers: s.markers,
+            lastPosition: s.position,
+          },
+        }
+      : s.trackStates;
+    set({
+      currentTrackId: null,
+      playing: false,
+      peaks: null,
+      position: 0,
+      markers: [],
+      trackStates,
+    });
   },
 
   togglePlay() {

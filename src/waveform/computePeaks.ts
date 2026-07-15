@@ -52,3 +52,21 @@ export function downsamplePeaks(peaks: Float32Array, columns: number): Float32Ar
   }
   return out;
 }
+
+// A card's waveform preview is ~48 bars, not a per-pixel trace: reuse the
+// minimap's column reduction and collapse each [min,max] pair into a single
+// 0..1 amplitude. Pure on purpose — the card renders SVG from this and owns no
+// drawing logic of its own.
+export function barHeights(peaks: Float32Array, bars: number): number[] {
+  if (bars <= 0) return [];
+  const cols = downsamplePeaks(peaks, bars);
+  // downsamplePeaks returns an empty array when there are no buckets at all;
+  // a flat row still has to render, so fall back to zeroes rather than [].
+  if (cols.length === 0) return new Array(bars).fill(0);
+  const out: number[] = [];
+  for (let i = 0; i < bars; i++) {
+    const amp = Math.max(Math.abs(cols[i * 2]), Math.abs(cols[i * 2 + 1]));
+    out.push(Math.min(1, amp));
+  }
+  return out;
+}

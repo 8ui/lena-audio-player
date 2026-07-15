@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computePeaks, downsamplePeaks } from './computePeaks';
+import { computePeaks, downsamplePeaks, barHeights } from './computePeaks';
 
 describe('computePeaks', () => {
   it('produces one min/max pair per bucket', () => {
@@ -59,5 +59,35 @@ describe('downsamplePeaks', () => {
   it('returns empty for empty peaks or non-positive columns', () => {
     expect(downsamplePeaks(new Float32Array(0), 10).length).toBe(0);
     expect(downsamplePeaks(new Float32Array([0, 1]), 0).length).toBe(0);
+  });
+});
+
+describe('barHeights', () => {
+  it('returns exactly `bars` entries', () => {
+    const peaks = computePeaks(new Float32Array(4410).fill(0.5), 44100);
+    expect(barHeights(peaks, 48)).toHaveLength(48);
+  });
+
+  it('collapses each [min,max] pair to its largest absolute amplitude', () => {
+    // Two buckets: [-0.25, 0.25] and [-0.8, 0.1]. The second is louder on the
+    // negative side, so the bar must follow |min|, not max.
+    const peaks = new Float32Array([-0.25, 0.25, -0.8, 0.1]);
+    expect(barHeights(peaks, 2)).toEqual(f32([0.25, 0.8]));
+  });
+
+  it('clamps to 1 — a bar can never overflow the card', () => {
+    const peaks = new Float32Array([-1.5, 1.2]);
+    expect(barHeights(peaks, 1)).toEqual(f32([1]));
+  });
+
+  // A track whose peaks failed to compute must still render a (flat) card
+  // rather than crash the whole list.
+  it('returns a full row of zeroes for empty peaks', () => {
+    expect(barHeights(new Float32Array(0), 4)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('returns nothing for a non-positive bar count', () => {
+    expect(barHeights(new Float32Array([0, 1]), 0)).toEqual([]);
+    expect(barHeights(new Float32Array([0, 1]), -1)).toEqual([]);
   });
 });
