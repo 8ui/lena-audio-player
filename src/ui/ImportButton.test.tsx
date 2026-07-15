@@ -28,8 +28,21 @@ describe('ImportButton', () => {
     expect(onPick).toHaveBeenCalledWith(file);
   });
 
+  it('does not call onPick when the change event carries no file', () => {
+    const onPick = vi.fn();
+    const { container } = render(
+      <ImportButton className="import-fab" label="импорт" onPick={onPick}>＋</ImportButton>,
+    );
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [] } });
+    expect(onPick).not.toHaveBeenCalled();
+  });
+
   // Picking the SAME file twice fires no change event unless the value is
   // cleared — the second import would silently do nothing.
+  // NOTE: This test only proves the reset line exists; it does not exercise it.
+  // In jsdom, a file input's value is always '' regardless of whether the
+  // e.target.value = '' assignment runs. Real coverage is device-only.
   it('clears the input so the same file can be picked again', () => {
     const { container } = render(
       <ImportButton className="import-fab" label="импорт" onPick={vi.fn()}>＋</ImportButton>,

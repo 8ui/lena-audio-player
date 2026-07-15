@@ -3,9 +3,6 @@ import { usePlayerStore } from '../store/usePlayerStore';
 import { fmtTime } from '../ui/time';
 import { AUDIO_ACCEPT } from '../ui/importAccept';
 
-// Re-export for any code that imports it from this module.
-export { AUDIO_ACCEPT };
-
 export function Library() {
   const library = usePlayerStore((s) => s.library);
   const importFile = usePlayerStore((s) => s.importFile);
