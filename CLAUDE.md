@@ -50,9 +50,14 @@ Five layers, each one only talks to the layer directly below it:
    is open is local React state (`sheetId` in `Library.tsx`), never the
    store — same rule `ControlTabs` follows for its open tab. `TrackWave` is
    deliberately **SVG, not a canvas**: `libraryModel.ts`'s `progressRatio`
-   plus `waveform/computePeaks.ts`'s `barHeights` (which downsamples peaks to
-   a fixed bar count) supply the pure numbers, and every bar's colour comes
-   from a CSS class/variable, so a theme switch recolours every card with no
+   plus `TrackWave`'s own pure `waveBars` (which reduces peaks to `COLS`=120
+   real `[min,max]` columns via `computePeaks.ts`'s `downsamplePeaks` — the
+   same reduction the minimap uses — and maps each to an asymmetric bar around
+   the centre line, exactly like `WaveformCanvas`) supply the pure numbers.
+   Those bars are emitted as just **two `<path>` elements** — one played, one
+   unplayed, split at the progress boundary — not one node per column, so a
+   dense preview costs 2 DOM nodes per card, and every bar's colour comes from
+   a CSS class/variable, so a theme switch recolours every card with no
    redraw. `ThemeToggle` (`src/ui/ThemeToggle.tsx`) is the first and only UI
    entry point to `theme.ts`'s `setThemeName`/`loadThemeName` — it is not
    store state, since theme has to apply before React mounts (see Theming).
