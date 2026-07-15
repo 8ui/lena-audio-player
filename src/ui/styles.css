@@ -296,7 +296,28 @@ button:disabled { opacity: 0.4; }
 }
 
 /* ── Library ─────────────────────────────────────────────────────────────
-   The card's waveform is SVG, not a canvas: these two rules are the entire
+   dvh, not vh — iOS's collapsing URL bar makes vh too tall (same as .player). */
+.library {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.track-list {
+  display: flex;
+  flex: 1;
+  /* Without min-height: 0 a flex item refuses to shrink below its content and
+     the list scrolls the whole page instead of itself. */
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 4px 12px;
+  /* The FAB floats over the list: without this the last card hides under it. */
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+/* The card's waveform is SVG, not a canvas: these two rules are the entire
    theme story for it. Switching the palette re-resolves the variables and
    every card recolours without a line of JS. */
 .track-wave {
@@ -385,16 +406,6 @@ button:disabled { opacity: 0.4; }
   font-size: 11px;
 }
 
-.screen-header { padding: calc(12px + env(safe-area-inset-top)) 16px 12px; }
-.control-row { display: flex; gap: 12px; align-items: center; }
-.library-item {
-  display: flex;
-  align-items: center;
-  min-height: 64px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border);
-}
-
 /* z-index is load-bearing, not decoration: .sheet-backdrop (40) must paint OVER
    the header, or a tap on the theme swatch with a sheet open would switch the
    palette instead of closing the sheet. position: relative is what makes the
@@ -437,6 +448,22 @@ button:disabled { opacity: 0.4; }
   background: var(--elevated);
   color: var(--text);
   font-size: 16px;
+}
+
+/* z-index 30: BELOW .sheet-backdrop (40). With a sheet open a tap here must
+   close the sheet, not open the file picker. See libraryLayers.test.ts. */
+.import-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 30;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 28px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
 .theme-toggle { background: transparent; }
