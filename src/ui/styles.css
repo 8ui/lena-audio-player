@@ -325,8 +325,8 @@ button:disabled { opacity: 0.4; }
   width: 100%;
   height: 28px;
 }
-.track-wave rect { fill: var(--muted); opacity: 0.45; }
-.track-wave rect.played { fill: var(--accent); opacity: 1; }
+.track-wave path { fill: var(--muted); opacity: 0.45; }
+.track-wave path.played { fill: var(--accent); opacity: 1; }
 
 .track-card {
   position: relative;
