@@ -106,7 +106,10 @@ Five layers, each one only talks to the layer directly below it:
    pitch, loop, pxPerSec, markers, lastPosition, keyed by trackId).
 
 Plus a thin **PWA shell**: `src/pwa/wakeLock.ts` (screen wake lock while
-playing) and `vite-plugin-pwa` (manifest + service worker, configured in
+playing), `src/pwa/installPrompt.ts` (captures `beforeinstallprompt`, drives
+the dismissible `src/ui/InstallBanner.tsx` shown on the Library screen in a
+browser — Chrome/Android only; iOS Safari has no such event, so it gets no
+banner), and `vite-plugin-pwa` (manifest + service worker, configured in
 `vite.config.ts`) for offline/installable behavior.
 
 ### What's tested vs. what's manually verified
@@ -140,7 +143,10 @@ and those bugs are pinned by tests. Do the same for the next gesture.
 **What tests structurally cannot cover here** (so don't trust green CI alone):
 audio actually being audible, `WORKLET_URL`/`base` correctness (vitest forces
 `base: '/'` — see gotcha 8), stretch quality and latency, real touch gestures,
-PWA install/offline, wake lock. All device-only.
+PWA install/offline, wake lock. All device-only. The `beforeinstallprompt`
+capture and native install flow (`event.prompt()`, `appinstalled`) are the same:
+jsdom never fires the event, so `InstallBanner.test.tsx` dispatches a synthetic
+one — real install is device-only.
 
 ## Engine rules (SoundTouchEngine)
 

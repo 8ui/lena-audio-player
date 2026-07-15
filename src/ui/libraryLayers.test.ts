@@ -43,6 +43,18 @@ describe('library layer order', () => {
     expect(sheetZ).toBeGreaterThan(backdropZ);
   });
 
+  // The install banner floats over the track list (above the FAB, z-index 30)
+  // but must stay BELOW the sheet backdrop (40) so an open track sheet covers
+  // it. jsdom can't hit-test, so pin it from the stylesheet.
+  it('keeps the install banner above the FAB but below the sheet backdrop', () => {
+    const bannerZ = Number(cssProp(cssBlock('.install-banner'), 'z-index'));
+    const fabZ = Number(cssProp(cssBlock('.import-fab'), 'z-index'));
+    const backdropZ = Number(cssProp(cssBlock('.sheet-backdrop'), 'z-index'));
+    expect(Number.isNaN(bannerZ), '.install-banner must declare a z-index').toBe(false);
+    expect(bannerZ).toBeGreaterThan(fabZ);
+    expect(bannerZ).toBeLessThan(backdropZ);
+  });
+
   // The MVP classes. If any of them comes back, something is rendering the old
   // screen.
   it.each(['.screen-header', '.control-row', '.library-item'])(

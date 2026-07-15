@@ -466,6 +466,61 @@ button:disabled { opacity: 0.4; }
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
+/* Browser-only install invite. z-index 35: ABOVE the FAB/header (30) so it
+   floats over the track list, but BELOW .sheet-backdrop (40) so an open track
+   sheet still covers it (pinned by libraryLayers.test.ts). Every colour is a
+   CSS variable — it re-themes for free, no redraw. */
+.install-banner {
+  position: fixed;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  /* Standalone full-bleed: keep the actions clear of the home indicator. */
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  color: var(--text);
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.4);
+}
+.install-banner__text {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.3;
+}
+.install-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.install-banner__install {
+  padding: 0 16px;
+  height: 40px;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+.install-banner__close {
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+}
+/* Lift the FAB above the banner while it is shown so they don't overlap.
+   :has() is supported on the same modern Chrome/Safari that fire the install
+   event, so it degrades harmlessly where the banner never appears anyway. */
+.library:has(.install-banner) .import-fab {
+  bottom: calc(84px + env(safe-area-inset-bottom));
+}
+
 .theme-toggle { background: transparent; }
 .theme-toggle .swatch {
   display: block;

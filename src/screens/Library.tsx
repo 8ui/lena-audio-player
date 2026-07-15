@@ -6,6 +6,7 @@ import { EmptyLibrary } from '../ui/EmptyLibrary';
 import { ImportButton } from '../ui/ImportButton';
 import { TrackCard } from '../ui/TrackCard';
 import { TrackSheet } from '../ui/TrackSheet';
+import { InstallBanner } from '../ui/InstallBanner';
 
 export function Library() {
   // Single-field selectors on purpose: a selector returning a fresh object every
@@ -57,6 +58,8 @@ export function Library() {
           onClose={() => setSheetId(null)}
         />
       )}
+
+      <InstallBanner />
     </div>
   );
 }
