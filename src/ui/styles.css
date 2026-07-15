@@ -395,6 +395,16 @@ button:disabled { opacity: 0.4; }
   border-bottom: 1px solid var(--border);
 }
 
+.theme-toggle { background: transparent; }
+.theme-toggle .swatch {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 /* The sheet's backdrop must paint ABOVE the header and the FAB — the OPPOSITE
    of the player's dock, where every row deliberately clears .backdrop. With a
    sheet open, a tap on ＋ must close the sheet, not open the file picker; a tap
