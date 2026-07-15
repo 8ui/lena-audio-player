@@ -395,6 +395,50 @@ button:disabled { opacity: 0.4; }
   border-bottom: 1px solid var(--border);
 }
 
+/* z-index is load-bearing, not decoration: .sheet-backdrop (40) must paint OVER
+   the header, or a tap on the theme swatch with a sheet open would switch the
+   palette instead of closing the sheet. position: relative is what makes the
+   z-index apply at all. Pinned by libraryLayers.test.ts. */
+.library-header {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Standalone on iOS runs full-bleed (viewport-fit=cover): without the inset
+     the title lands under the status bar / notch. env() is 0 elsewhere. */
+  padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+}
+.library-header h1 {
+  flex: 1;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.5;
+}
+.import-cta {
+  padding: 0 22px;
+  height: 56px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--elevated);
+  color: var(--text);
+  font-size: 16px;
+}
+
 .theme-toggle { background: transparent; }
 .theme-toggle .swatch {
   display: block;
