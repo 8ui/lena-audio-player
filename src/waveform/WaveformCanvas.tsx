@@ -2,6 +2,14 @@ import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '../store/usePlayerStore';
 import { timeToX, xToTime, clampPxPerSec } from './viewport';
 import { activePalette } from '../ui/theme';
+import { INERTIA_CONFIG } from './inertiaConfig';
+import {
+  velocityFromSamples,
+  snapTargets,
+  planFling,
+  flingPositionAt,
+  type VelocitySample,
+} from './inertia';
 
 export function WaveformCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -104,7 +112,82 @@ export function WaveformCanvas() {
     let lastX = 0;
     let pinchStartDist = 0;
     let pinchStartPx = 100;
+    // wasPlaying spans the whole pan -> fling handoff: playback is paused for
+    // the gesture and resumed only when the glide settles, not at touchend.
     let wasPlaying = false;
+
+    // Velocity ring buffer, fed on every pan move; read once at release.
+    const samples: VelocitySample[] = [];
+    const pushSample = (x: number) => {
+      samples.push({ x, t: performance.now() });
+      if (samples.length > INERTIA_CONFIG.velocityBufferSize) samples.shift();
+    };
+
+    // Dedicated fling rAF. It only ever calls store.seek() — NEVER store.tick()
+    // — so WaveformCanvas's draw loop stays the sole engine-clock ticker.
+    let flingRaf = 0;
+    const cancelFling = () => {
+      if (flingRaf) {
+        cancelAnimationFrame(flingRaf);
+        flingRaf = 0;
+      }
+    };
+
+    const reducedMotion =
+      typeof matchMedia !== 'undefined' &&
+      matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Resume playback (if it was playing) and clear the pause flag. Called at
+    // the end of every settle path.
+    const finishGesture = () => {
+      cancelFling();
+      if (wasPlaying) store.getState().togglePlay();
+      wasPlaying = false;
+    };
+
+    const startFling = () => {
+      const s = store.getState();
+      const velocityPx = velocityFromSamples(
+        samples,
+        performance.now(),
+        INERTIA_CONFIG.velocityWindowMs,
+      );
+      const from = s.position;
+      const plan = planFling({
+        position: from,
+        velocityPx,
+        pxPerSec: s.pxPerSec,
+        duration: s.duration,
+        targets: snapTargets(s.markers, s.duration),
+        cfg: INERTIA_CONFIG,
+      });
+
+      if (
+        (INERTIA_CONFIG.respectReducedMotion && reducedMotion) ||
+        plan.durationMs <= 0
+      ) {
+        store.getState().seek(plan.target);
+        finishGesture();
+        return;
+      }
+
+      const startT = performance.now();
+      const step = () => {
+        const { position, done } = flingPositionAt(
+          from,
+          plan.target,
+          plan.durationMs,
+          performance.now() - startT,
+        );
+        store.getState().seek(position);
+        if (done) {
+          finishGesture();
+          return;
+        }
+        flingRaf = requestAnimationFrame(step);
+      };
+      flingRaf = requestAnimationFrame(step);
+    };
 
     const dist = (t: TouchList) =>
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
@@ -118,11 +201,22 @@ export function WaveformCanvas() {
     const onStart = (e: TouchEvent) => {
       const s = store.getState();
       if (e.targetTouches.length === 1 && mode === 'none') {
+        // A touch landing mid-fling adopts the in-progress pause: cancel the
+        // glide but keep wasPlaying so the next release still resumes.
+        const flinging = flingRaf !== 0;
+        cancelFling();
         mode = 'pan';
         lastX = e.targetTouches[0].clientX;
-        wasPlaying = s.playing;
-        if (wasPlaying) s.togglePlay();
+        samples.length = 0;
+        pushSample(lastX);
+        if (!flinging) {
+          wasPlaying = s.playing;
+          if (wasPlaying) s.togglePlay();
+        }
       } else if (e.targetTouches.length === 2) {
+        // Cancel any fling; wasPlaying persists and resumes on the pinch's
+        // touchend chain.
+        cancelFling();
         mode = 'pinch';
         pinchStartDist = Math.max(1, dist(e.targetTouches));
         pinchStartPx = s.pxPerSec;
@@ -135,6 +229,7 @@ export function WaveformCanvas() {
         const x = e.targetTouches[0].clientX;
         const dt = -(x - lastX) / s.pxPerSec;
         lastX = x;
+        pushSample(x);
         s.seek(Math.max(0, Math.min(s.position + dt, s.duration)));
       } else if (mode === 'pinch' && e.targetTouches.length === 2) {
         const factor = dist(e.targetTouches) / pinchStartDist;
@@ -143,26 +238,50 @@ export function WaveformCanvas() {
     };
     const onEnd = (e: TouchEvent) => {
       if (e.targetTouches.length === 0) {
-        if (wasPlaying) store.getState().togglePlay();
-        mode = 'none';
-        wasPlaying = false;
+        if (mode === 'pan') {
+          // Hand the pan off to the glide; it resumes playback when it settles.
+          mode = 'none';
+          startFling();
+        } else {
+          // Pinch (or idle) ended: resume directly.
+          mode = 'none';
+          if (wasPlaying) {
+            store.getState().togglePlay();
+            wasPlaying = false;
+          }
+        }
       } else if (e.targetTouches.length === 1 && mode === 'pinch') {
+        // Lifting one of two fingers drops back to pan: start a fresh velocity
+        // trace from here so the eventual release flings correctly.
         mode = 'pan';
         lastX = e.targetTouches[0].clientX;
+        samples.length = 0;
+        pushSample(lastX);
+      }
+    };
+    // Without touchcancel a cancelled gesture strands playback paused forever.
+    // Cancel settles immediately — no fling on an aborted gesture — and resumes
+    // playback if it was playing.
+    const onCancel = () => {
+      cancelFling();
+      mode = 'none';
+      samples.length = 0;
+      if (wasPlaying) {
+        store.getState().togglePlay();
+        wasPlaying = false;
       }
     };
 
     canvas.addEventListener('touchstart', onStart, { passive: false });
     canvas.addEventListener('touchmove', onMove, { passive: false });
     canvas.addEventListener('touchend', onEnd);
-    // Without touchcancel a cancelled pan leaves mode='pan' and wasPlaying=true
-    // — playback would stay paused forever.
-    canvas.addEventListener('touchcancel', onEnd);
+    canvas.addEventListener('touchcancel', onCancel);
     return () => {
+      cancelFling();
       canvas.removeEventListener('touchstart', onStart);
       canvas.removeEventListener('touchmove', onMove);
       canvas.removeEventListener('touchend', onEnd);
-      canvas.removeEventListener('touchcancel', onEnd);
+      canvas.removeEventListener('touchcancel', onCancel);
     };
   }, [store]);
 
