@@ -162,6 +162,13 @@ export function WaveformCanvas() {
         cfg: INERTIA_CONFIG,
       });
 
+      // Nothing to travel (a bare tap with no snap target nearby): resume at
+      // once instead of running a 300ms no-op glide that would gap playback.
+      if (Math.abs(plan.target - from) < 1e-4) {
+        finishGesture();
+        return;
+      }
+
       if (
         (INERTIA_CONFIG.respectReducedMotion && reducedMotion) ||
         plan.durationMs <= 0
