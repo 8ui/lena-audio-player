@@ -30,13 +30,12 @@ export function TrackCard({ track, state, onOpen, onMenu }: Props) {
       <div className="body">
         <div className="row">
           <span className="name">{track.name}</span>
-          <span className="dur">{fmtTime(track.duration)}</span>
         </div>
 
         <TrackWave peaks={track.peaks} progress={progressRatio(lastPosition, track.duration)} />
 
         <div className="row meta">
-          {lastPosition > 0 && <span className="resume">{fmtTime(lastPosition)}</span>}
+          <span className="resume">{lastPosition > 0 ? fmtTime(lastPosition) : '00:00'} / {fmtTime(track.duration)}</span>
           {badges.map((b) => (
             <span key={b} className="badge">{b}</span>
           ))}
