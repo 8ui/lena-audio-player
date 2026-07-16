@@ -1,8 +1,8 @@
 :root {
   --touch: 48px;
-  --r-lg: 20px;
-  --r-md: 14px;
-  --r-sm: 10px;
+  --r-lg: 12px;
+  --r-md: 10px;
+  --r-sm: 8px;
 }
 
 /* Values here are mirrored in src/ui/theme.ts — theme.test.ts fails if they
