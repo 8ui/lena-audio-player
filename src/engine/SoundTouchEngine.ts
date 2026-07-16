@@ -1,6 +1,6 @@
 import { SoundTouchNode } from '@soundtouchjs/audio-worklet';
 import type { AudioEngine } from './AudioEngine';
-import { currentSourceTime } from './position';
+import { currentSourceTime, clampIntoLoop } from './position';
 import { clampTempo, clampSemitones } from './params';
 
 // The real @soundtouchjs/audio-worklet package (v2.1.0) ships its pre-bundled
@@ -102,7 +102,10 @@ export class SoundTouchEngine implements AudioEngine {
   }
 
   seek(seconds: number): void {
-    const t = Math.max(0, Math.min(seconds, this.getDuration()));
+    // Snap into the loop region if one is active (see clampIntoLoop): seeking
+    // before it must start playback at loopStart, not play up to loopEnd first.
+    const clamped = clampIntoLoop(seconds, this.loopStart, this.loopEnd);
+    const t = Math.max(0, Math.min(clamped, this.getDuration()));
     this.pausedAt = t;
     if (this.playing) {
       this.stopInternal();
@@ -145,6 +148,10 @@ export class SoundTouchEngine implements AudioEngine {
 
   private startSource(offset: number): void {
     if (!this.buffer) return;
+    // Start inside the loop when one is active. Native source.loop plays from a
+    // pre-loop offset up to loopEnd before wrapping, which would desync audio
+    // from the loopStart-pinned playhead — so clamp the launch offset instead.
+    offset = clampIntoLoop(offset, this.loopStart, this.loopEnd);
     // Idempotent cleanup: guarantees no previous source/node graph is left
     // dangling (e.g. after a natural end where the caller didn't stopInternal()).
     this.stopInternal();

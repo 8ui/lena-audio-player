@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentSourceTime } from './position';
+import { currentSourceTime, clampIntoLoop } from './position';
 
 const base = { startOffset: 0, tempo: 1, duration: 100, loopStart: null, loopEnd: null };
 
@@ -33,5 +33,24 @@ describe('currentSourceTime', () => {
     expect(r.ended).toBe(false);
     expect(r.time).toBeGreaterThanOrEqual(90);
     expect(r.time).toBeLessThan(95);
+  });
+});
+
+describe('clampIntoLoop', () => {
+  it('snaps a target before the loop to loopStart', () => {
+    expect(clampIntoLoop(5, 20, 40)).toBe(20);
+  });
+  it('snaps a target after the loop to loopEnd', () => {
+    expect(clampIntoLoop(50, 20, 40)).toBe(40);
+  });
+  it('leaves a target inside the loop unchanged', () => {
+    expect(clampIntoLoop(30, 20, 40)).toBe(30);
+  });
+  it('is a no-op when there is no loop', () => {
+    expect(clampIntoLoop(5, null, null)).toBe(5);
+  });
+  it('is a no-op for a degenerate loop (end <= start)', () => {
+    expect(clampIntoLoop(5, 40, 40)).toBe(5);
+    expect(clampIntoLoop(5, 40, 20)).toBe(5);
   });
 });

@@ -23,3 +23,18 @@ export function currentSourceTime(p: PositionParams): { time: number; ended: boo
   if (raw >= p.duration) return { time: p.duration, ended: true };
   return { time: raw, ended: false };
 }
+
+// A seek target outside an active loop is not a playable position: native
+// `source.loop` plays from the raw offset up to loopEnd before it ever wraps,
+// so a seek before the region would play from there while the computed playhead
+// (currentSourceTime above) is pinned at loopStart — the two disagree. Snapping
+// the seek target into [loopStart, loopEnd] keeps audio and playhead in step.
+// No-op when there is no loop (either bound null, or a degenerate end <= start).
+export function clampIntoLoop(
+  t: number,
+  loopStart: number | null,
+  loopEnd: number | null,
+): number {
+  if (loopStart === null || loopEnd === null || loopEnd <= loopStart) return t;
+  return Math.max(loopStart, Math.min(t, loopEnd));
+}

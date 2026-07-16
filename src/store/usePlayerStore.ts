@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { AudioEngine } from '../engine/AudioEngine';
 import { SoundTouchEngine } from '../engine/SoundTouchEngine';
 import { clampTempo, clampSemitones } from '../engine/params';
+import { clampIntoLoop } from '../engine/position';
 import { computePeaks } from '../waveform/computePeaks';
 import { clampPxPerSec, PX_PER_SEC_DEFAULT } from '../waveform/viewport';
 import * as db from '../storage/db';
@@ -277,8 +278,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   seek(t) {
-    engine?.seek(t);
-    set({ position: t });
+    // A seek outside an active loop snaps into the region — otherwise audio
+    // plays from the raw offset while the playhead sits pinned at loopStart
+    // (see clampIntoLoop). Clamp here too, not just in the engine: the store's
+    // `position` is set independently and, while paused, no tick() re-syncs it
+    // from the engine, so an unclamped value would show a wrong playhead.
+    const { loopStart, loopEnd } = get();
+    const target = clampIntoLoop(t, loopStart, loopEnd);
+    engine?.seek(target);
+    set({ position: target });
     persist();
   },
 

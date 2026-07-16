@@ -52,6 +52,21 @@ describe('player store', () => {
     expect(usePlayerStore.getState().pitch).toBe(-12);
   });
 
+  it('seek clamps the target into the active loop region', () => {
+    usePlayerStore.setState({ loopStart: 20, loopEnd: 40 });
+    usePlayerStore.getState().seek(5); // before A -> snaps to A
+    expect(usePlayerStore.getState().position).toBe(20);
+    usePlayerStore.getState().seek(50); // after B -> snaps to B
+    expect(usePlayerStore.getState().position).toBe(40);
+    usePlayerStore.getState().seek(30); // inside -> unchanged
+    expect(usePlayerStore.getState().position).toBe(30);
+  });
+
+  it('seek is unrestricted when no loop is set', () => {
+    usePlayerStore.getState().seek(5);
+    expect(usePlayerStore.getState().position).toBe(5);
+  });
+
   it('setLoopA then setLoopB records region from current position', () => {
     usePlayerStore.setState({ position: 5 });
     usePlayerStore.getState().setLoopA();
